@@ -49,36 +49,48 @@
         
     </a-scene>
 
-    <script>
-        // LÓGICA DE RUTEO GEOGRÁFICO POR QR
-        window.addEventListener('DOMContentLoaded', () => {
-            const cartel = document.getElementById('cartel-estacion');
-            const elModelo = document.getElementById('modelo-activo');
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+        const cartel = document.getElementById('cartel-estacion');
+        const elModelo = document.getElementById('modelo-activo');
 
-            // Leemos el parámetro de la URL (ejemplo: ?id=mono)
-            const urlParams = new URLSearchParams(window.location.search);
-            const estacionId = urlParams.get('id');
+        // Leemos el parámetro de la URL (?id=...)
+        const urlParams = new URLSearchParams(window.location.search);
+        const estacionId = urlParams.get('id');
 
-            // Diccionario de estaciones del circuito de Neuquén
-            const estaciones = {
-                'dino': { nombre: 'Estación 1: Parque de los Dinosaurios', asset: '#dino-glb', escala: '0.2 0.2 0.2' },
-                'mono': { nombre: 'Estación 2: Fauna Autóctona', asset: '#mono-glb', escala: '0.15 0.15 0.15' },
-                'planta': { nombre: 'Estación 3: Flora de la Barda', asset: '#planta-glb', escala: '0.25 0.25 0.25' }
-            };
-
-            if (estacionId && estaciones[estacionId]) {
-                const datos = estaciones[estacionId];
-                cartel.innerText = datos.nombre;
-                
-                // Inyectamos el modelo correspondiente en caliente
-                elModelo.setAttribute('gltf-model', datos.asset);
-                elModelo.setAttribute('scale', datos.escala);
-            } else {
-                // Caso por defecto si entran al link limpio sin QR
-                cartel.innerHTML = "Escaneá un Tótem Oficial del Circuito";
-                elModelo.setAttribute('gltf-model', '#dino-glb'); // Fallback automático al dino
+        // DICCIONARIO CALIBRADO: Aumentamos las escalas para que se vean grandes en tu comedor
+        const estaciones = {
+            'dino': { 
+                nombre: 'Estación 1: Parque de los Dinosaurios', 
+                asset: '#dino-glb', 
+                escala: '1.5 1.5 1.5' // Escalado hacia arriba
+            },
+            'mono': { 
+                nombre: 'Estación 2: monito ', 
+                asset: '#mono-glb', 
+                escala: '2.0 2.0 2.0' // Si se veía muy chico, duplicamos el tamaño base
+            },
+            'planta': { 
+                nombre: 'Estación 3: Flora bla bla', 
+                asset: '#planta-glb', 
+                escala: '1.8 1.8 1.8' 
             }
-        });
-    </script>
+        };
+
+        if (estacionId && estaciones[estacionId]) {
+            const datos = estaciones[estacionId];
+            cartel.innerText = datos.nombre;
+            
+            // modelo y su nueva escala corregida
+            elModelo.setAttribute('gltf-model', datos.asset);
+            elModelo.setAttribute('scale', datos.escala);
+            console.log("Cargada estación con escala corregida: " + estacionId);
+        } else {
+            cartel.innerText = "Estación 1: Parque de los Dinosaurios (Modo Demostración)";
+            elModelo.setAttribute('gltf-model', '#dino-glb');
+            elModelo.setAttribute('scale', '1.5 1.5 1.5');
+        }
+    });
+</script>
 </body>
 </html>
