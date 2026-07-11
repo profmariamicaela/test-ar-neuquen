@@ -3,100 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Circuito Turístico Neuquén - WebAR</title>
-    <!-- Librerías de código abierto estables para Geolocalización -->
+    <title>Circuito Neuquén - Prueba de Campo</title>
+    <!-- Librerías estables de A-Frame y AR.js -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <style>
+        /* Panel flotante de diagnóstico para el test de campo */
+        #panel-debug {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: lime;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 1000;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body style="margin: 0px; overflow: hidden;">
 
-    <!-- Inicializamos la escena con alta precisión de tracking y GPS -->
+    <!-- Panel que te mostrará los metros exactos mientras caminás -->
+    <div id="panel-debug">Buscando señal satelital...</div>
+
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" vr-mode-ui="enabled: false">
         
         <a-assets>
-            <!-- Cargamos los 3 activos distintos para el circuito de Neuquén -->
             <a-asset-item id="dinosaurio-glb" src="models/dino.glb"></a-asset-item>
             <a-asset-item id="mono-glb" src="models/mono.glb"></a-asset-item>
             <a-asset-item id="planta-glb" src="models/planta.glb"></a-asset-item>
         </a-assets>
 
-        <!-- ========================================== -->
-        <!-- ELEMENTO 1: DINOSAURIO (Ej: Estación 1 del Parque) -->
-        <!-- ========================================== -->
+        <!-- ELEMENTO 1: DINOSAURIO (Coordenadas de prueba que definiste) -->
         <a-entity 
             id="estacion-dino"
             gps-entity-place="latitude: -34.6423331; longitude: -58.473931;" 
-            visible="false"> <!-- Nace oculto hasta que el GPS valide cercanía -->
-            
-            <a-entity 
-                gltf-model="#dinosaurio-glb" 
-                position="0 0 0" 
-                scale="1 1 1">
-            </a-entity>
+            visible="false">
+            <a-entity gltf-model="#dinosaurio-glb" position="0 0 0" scale="1 1 1"></a-entity>
         </a-entity>
 
-        <!-- ========================================== -->
-        <!-- ELEMENTO 2: MONO / FAUNA (A 30 metros del anterior) -->
-        <!-- ========================================== -->
+        <!-- ELEMENTO 2: MONO (Coordenadas de prueba que definiste) -->
         <a-entity 
             id="estacion-mono"
             gps-entity-place="latitude: -34.644973; longitude: -58.472789;" 
             visible="false">
-            
-            <a-entity 
-                gltf-model="#serpiente-glb" 
-                position="0 0 0" 
-                scale="0.5 0.5 0.5">
-            </a-entity>
+            <a-entity gltf-model="#mono-glb" position="0 0 0" scale="0.5 0.5 0.5"></a-entity>
         </a-entity>
 
-        <!-- ========================================== -->
-        <!-- ELEMENTO 3: PLANTA / FLORA AUTOCTONA (En otra coordenada) -->
-        <!-- ========================================== -->
+        <!-- ELEMENTO 3: PLANTA (Coordenadas de prueba que definiste) -->
         <a-entity 
             id="estacion-planta"
             gps-entity-place="latitude: -34.644447; longitude: -58.473787;" 
             visible="false">
-            
-            <a-entity 
-                gltf-model="#planta-glb" 
-                position="0 0 0" 
-                scale="0.8 0.8 0.8">
-            </a-entity>
+            <a-entity gltf-model="#planta-glb" position="0 0 0" scale="0.8 0.8 0.8"></a-entity>
         </a-entity>
 
-        <!-- CAMARA CON LECTOR DE POSICIÓN GEOGRÁFICA -->
         <a-entity camera gps-camera="simulateLatitude: 0; simulateLongitude: 0;" rotation-reader></a-entity>
         
     </a-scene>
 
-    <!-- ========================================== -->
-    <!-- SCRIPT DE CONTROL DE PROXIMIDAD (Lógica de Negocio) -->
-    <!-- ========================================== -->
     <script>
+        const panelDebug = document.getElementById('panel-debug');
+
         window.addEventListener('gps-camera-update-position', e => {
-            // El celular detecta las coordenadas en tiempo real del turista
-            console.log("GPS Actualizado. Calculando distancias en el predio...");
-            
             const listaElementos = [
-                { id: 'estacion-dino', RangoActivacion: 15 },      // Se activa a menos de 15 metros
-                { id: 'estacion-mono', RangoActivacion: 10 }, // Se activa a menos de 10 metros
-                { id: 'estacion-planta', RangoActivacion: 8 }     // Se activa a menos de 8 metros
+                { id: 'estacion-dino', label: 'Dino', RangoActivacion: 15 },      
+                { id: 'estacion-mono', label: 'Mono', RangoActivacion: 10 }, 
+                { id: 'estacion-planta', label: 'Planta', RangoActivacion: 8 }     
             ];
+
+            let textoDebug = '<b>Distancias al objetivo:</b><br>';
 
             listaElementos.forEach(elemento => {
                 const entidad = document.getElementById(elemento.id);
-                // Calculamos la distancia matemática entre el usuario y el objeto de Neuquén
-                const distancia = entidad.components['gps-entity-place'].distance;
                 
-                if (distancia <= elemento.RangoActivacion) {
-                    // Si el turista entró al radio, el objeto aparece fijado en su coordenada
-                    entidad.setAttribute('visible', 'true');
-                } else {
-                    // Si se aleja caminando, el objeto se desvanece para no saturar el teléfono
-                    entidad.setAttribute('visible', 'false');
+                if (entidad && entidad.components['gps-entity-place']) {
+                    const distancia = entidad.components['gps-entity-place'].distance;
+                    
+                    if (distancia !== undefined && distancia !== null) {
+                        const distMetros = Math.round(distancia);
+                        // Agregamos la información al panel de la pantalla
+                        textoDebug += `- ${elemento.label}: ${distMetros}m (Rango: ${elemento.RangoActivacion}m)<br>`;
+                        
+                        if (distancia <= elemento.RangoActivacion) {
+                            entidad.setAttribute('visible', 'true');
+                        } else {
+                            entidad.setAttribute('visible', 'false');
+                        }
+                    } else {
+                        textoDebug += `- ${elemento.label}: Calculando...<br>`;
+                    }
                 }
             });
+
+            // Actualizamos el cartel flotante en tiempo real
+            panelDebug.innerHTML = textoDebug;
         });
     </script>
 </body>
