@@ -3,123 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Circuito Neuquén - Prueba de Campo</title>
-    <!-- Librerías estables de A-Frame y AR.js -->
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <title>Circuito Turístico Neuquén - WebAR</title>
+    <!-- A-Frame estable para tracking de piso WebXR nativo -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <style>
-        /* Panel flotante de diagnóstico para el test de campo */
-        #panel-debug {
+        #cartel-estacion {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            color: lime;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 12px;
-            z-index: 1000;
-            border-radius: 5px;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ffcc;
+            padding: 12px 25px;
+            border-radius: 20px;
+            font-family: sans-serif;
+            font-size: 14px;
+            font-weight: bold;
             pointer-events: none;
         }
     </style>
 </head>
 <body style="margin: 0px; overflow: hidden;">
 
-    <!-- Panel que te mostrará los metros exactos mientras caminás -->
-    <div id="panel-debug">Buscando señal satelital...</div>
+    <div id="cartel-estacion">Cargando Estación Turística...</div>
 
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" vr-mode-ui="enabled: false">
+    <!-- Escena limpia de WebXR nativo (Cero dependencias de GPS roto) -->
+    <a-scene webxr="optionalFeatures: hit-test, local-floor;" renderer="colorManagement: true;">
         
-        <a-assets>
-            <a-asset-item id="dinosaurio-glb" src="models/dino.glb"></a-asset-item>
+        <a-assets id="assets-pool">
+            <!-- Declaramos los tres recursos del circuito de Neuquén -->
+            <a-asset-item id="dino-glb" src="models/dino.glb"></a-asset-item>
             <a-asset-item id="mono-glb" src="models/mono.glb"></a-asset-item>
             <a-asset-item id="planta-glb" src="models/planta.glb"></a-asset-item>
         </a-assets>
 
-        <!-- ELEMENTO 1: DINOSAURIO (Coordenadas de prueba que definiste) -->
-        <a-entity 
-            id="estacion-dino"
-            gps-entity-place="latitude: -34.6423331; longitude: -58.473931;" 
-            visible="false">
-            <a-entity gltf-model="#dinosaurio-glb" position="0 0 0" scale="1 1 1"></a-entity>
+        <!-- Contenedor único que recibirá el modelo dinámicamente -->
+        <a-entity id="anclaje-espacial" position="0 -0.5 -2.5">
+            <a-entity id="modelo-activo" gltf-model="" scale="0.2 0.2 0.2" rotation="0 45 0"></a-entity>
         </a-entity>
 
-        <!-- ELEMENTO 2: MONO (Coordenadas de prueba que definiste) -->
-        <a-entity 
-            id="estacion-mono"
-            gps-entity-place="latitude: -34.64497; longitude: -58.47281;" 
-            visible="false">
-            <a-entity gltf-model="#mono-glb" position="0 0 0" scale="0.5 0.5 0.5"></a-entity>
-        </a-entity>
-
-        <!-- ELEMENTO 3: PLANTA (Coordenadas de prueba que definiste) -->
-        <a-entity 
-            id="estacion-planta"
-            gps-entity-place="latitude: -34.644447; longitude: -58.473787;" 
-            visible="false">
-            <a-entity gltf-model="#planta-glb" position="0 0 0" scale="0.8 0.8 0.8"></a-entity>
-        </a-entity>
-
-        <a-entity camera gps-camera="simulateLatitude: 0; simulateLongitude: 0;" rotation-reader></a-entity>
+        <a-entity light="type: ambient; intensity: 0.8;"></a-entity>
+        <a-entity light="type: directional; intensity: 0.6;" position="1 3 1"></a-entity>
+        <a-entity camera look-controls></a-entity>
         
     </a-scene>
 
     <script>
-        const panelDebug = document.getElementById('panel-debug');
+        // LÓGICA DE RUTEO GEOGRÁFICO POR QR
+        window.addEventListener('DOMContentLoaded', () => {
+            const cartel = document.getElementById('cartel-estacion');
+            const elModelo = document.getElementById('modelo-activo');
 
-        // FUNCIÓN CENTRAL DE RENDERIZADO
-        function actualizarPosicionWebAR(coords) {
-            const userLat = coords.latitude;
-            const userLon = coords.longitude;
-            
-            const listaElementos = [
-                { id: 'estacion-dino', label: 'Dino', RangoActivacion: 15 },      
-                { id: 'estacion-mono', label: 'Mono', RangoActivacion: 10 }, 
-                { id: 'estacion-planta', label: 'Planta', RangoActivacion: 8 }     
-            ];
+            // Leemos el parámetro de la URL (ejemplo: ?id=mono)
+            const urlParams = new URLSearchParams(window.location.search);
+            const estacionId = urlParams.get('id');
 
-            let textoDebug = `<b>Tu GPS actual:</b> ${userLat.toFixed(5)}, ${userLon.toFixed(5)}<br><br><b>Distancias:</b><br>`;
+            // Diccionario de estaciones del circuito de Neuquén
+            const estaciones = {
+                'dino': { nombre: 'Estación 1: Parque de los Dinosaurios', asset: '#dino-glb', escala: '0.2 0.2 0.2' },
+                'mono': { nombre: 'Estación 2: Fauna Autóctona', asset: '#mono-glb', escala: '0.15 0.15 0.15' },
+                'planta': { nombre: 'Estación 3: Flora de la Barda', asset: '#planta-glb', escala: '0.25 0.25 0.25' }
+            };
 
-            listaElementos.forEach(elemento => {
-                const entidad = document.getElementById(elemento.id);
+            if (estacionId && estaciones[estacionId]) {
+                const datos = estaciones[estacionId];
+                cartel.innerText = datos.nombre;
                 
-                if (entidad && entidad.components['gps-entity-place']) {
-                    const distancia = entidad.components['gps-entity-place'].distance;
-                    
-                    if (distancia !== undefined && distancia !== null) {
-                        const distMetros = Math.round(distancia);
-                        textoDebug += `- ${elemento.label}: ${distMetros}m (Rango: ${elemento.RangoActivacion}m)<br>`;
-                        
-                        if (distancia <= elemento.RangoActivacion) {
-                            entidad.setAttribute('visible', 'true');
-                        } else {
-                            entidad.setAttribute('visible', 'false');
-                        }
-                    } else {
-                        textoDebug += `- ${elemento.label}: Inicializando coordenadas...<br>`;
-                    }
-                }
-            });
-            panelDebug.innerHTML = textoDebug;
-        }
-
-        // 1. INTENTO DE ARRANQUE INMEDIATO (Failsafe)
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(position => {
-                console.log("Primer punto GPS obtenido.");
-                actualizarPosicionWebAR(position.coords);
-            }, err => {
-                panelDebug.innerHTML = `Error de GPS Inicial: ${err.message}. Revise los permisos de su navegador.`;
-            }, { enableHighAccuracy: true });
-        }
-
-        // 2. ESCUCHA DE CAMINATA EN TIEMPO REAL
-        window.addEventListener('gps-camera-update-position', e => {
-            console.log("Evento dinámico de AR.js disparado.");
-            // AR.js maneja internamente las coordenadas en el evento, se las pasamos a nuestra función
-            if (e.detail && e.detail.position) {
-                actualizarPosicionWebAR(e.detail.position);
+                // Inyectamos el modelo correspondiente en caliente
+                elModelo.setAttribute('gltf-model', datos.asset);
+                elModelo.setAttribute('scale', datos.escala);
+            } else {
+                // Caso por defecto si entran al link limpio sin QR
+                cartel.innerHTML = "Escaneá un Tótem Oficial del Circuito";
+                elModelo.setAttribute('gltf-model', '#dino-glb'); // Fallback automático al dino
             }
         });
     </script>
