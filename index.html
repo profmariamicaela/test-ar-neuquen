@@ -3,23 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Neuquén WebAR - Demo </title>
+    <title>Neuquén WebAR - Circuito Georreferenciado</title>
     <!-- A-Frame para WebXR nativo -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <style>
+        /* Interfaz de usuario para guiar al turista antes de activar la RA */
+        #ui-guia {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            text-align: center;
+            pointer-events: none;
+            display: block;
+        }
+    </style>
 </head>
 <body style="margin: 0px; overflow: hidden;">
 
-    <!-- inicio de escena API nativa del navegador para RA (WebXR) -->
-    <!--para sacar la variable de GPS , a ver si asi me queda en el pisoooo  -->
-    <a-scene webxr="optionalFeatures: hit-test, local-floor;" arjs="sourceType: webcam; debugUIEnabled: false;">
+    <!-- Cartel dinámico para el usuario -->
+    <div id="ui-guia">Buscando señal GPS y calibrando posición...</div>
+
+    <!-- Escena oculta inicialmente (visible: false) hasta que el GPS valide la posición -->
+    <a-scene id="escena-ar" webxr="optionalFeatures: hit-test, local-floor;" renderer="colorManagement: true;" visible="false">
         
         <a-assets>
-            <!-- render .glb -->
             <a-asset-item id="dinosaurio" src="dino.glb"></a-asset-item>
         </a-assets>
 
-        <!-- Anclaje espacial  -->
-        <!-- Posicionamos al dinosaurio 2 metros adelante (Z = -2) y apoyado en el piso (Y = 0) -->
+        <!-- El contenedor se mantiene con la estabilidad de WebXR nativo  -->
         <a-entity id="contenedor-dino" position="0 0 -2">
             <a-entity 
                 gltf-model="#dinosaurio" 
@@ -28,9 +47,66 @@
             </a-entity>
         </a-entity>
 
-        <!-- probando: lacmara se desvincula del objeto. El usuario puede caminar alrededor -->
         <a-entity camera look-controls></a-entity>
         
     </a-scene>
+
+    <script>
+        // COORDENADAS OBJETIVO (pongo las de casa de prueba)
+        const TARGET_LAT = -34.644974; 
+        const TARGET_LON = -58.472789;
+        const RANGO_ACTIVACION = 10; // Radio de tolerancia en metros
+
+        const uiGuia = document.getElementById('ui-guia');
+        const escenaAR = document.getElementById('escena-ar');
+
+        // Función matemática estándar (Fórmula de Haversine) para calcular distancia real en metros entre dos coordenadas GPS, a chequear!
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radio de la Tierra en metros
+            const phi1 = lat1 * Math.PI / 180;
+            const phi2 = lat2 * Math.PI / 180;
+            const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+            const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                      Math.cos(phi1) * Math.cos(phi2) *
+                      Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c; // Retorna la distancia en metros
+        }
+
+        // Monitoreo del GPS del teléfono en tiempo real
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition((position) => {
+                const userLat = position.coords.latitude;
+                const userLon = position.coords.longitude;
+
+                // Calculamos cuántos metros separan al turista del dinosaurio
+                const distancia = calcularDistancia(userLat, userLon, TARGET_LAT, TARGET_LON);
+                
+                console.log(`Distancia al objetivo: ${distancia.toFixed(2)} metros.`);
+
+                if (distancia <= RANGO_ACTIVACION) {
+                    // SI ESTÁ CERCA: Activamos el motor gráfico y limpiamos la pantalla
+                    escenaAR.setAttribute('visible', 'true');
+                    uiGuia.style.display = 'none'; 
+                } else {
+                    // SI ESTÁ LEJOS: Apagamos el motor y le indicamos cuántos metros le faltan caminar
+                    escenaAR.setAttribute('visible', 'false');
+                    uiGuia.style.display = 'block';
+                    uiGuia.innerHTML = `Acércate a la Estación del Dinosaurio.<br>Te faltan marchar: ${distancia.toFixed(0)} metros.`;
+                }
+            }, (error) => {
+                uiGuia.innerHTML = "Error: Por favor activa la alta precisión de tu GPS.";
+            }, {
+                enableHighAccuracy: true, // Forzamos el uso del chip GPS de hardware y no solo triangulación de antenas celular -a mi me tira error porque no tengo la precision activa
+                maximumAge: 0,
+                timeout: 5000
+            });
+        } else {
+            uiGuia.innerHTML = "Tu navegador no soporta geolocalización nativa.";
+        }
+    </script>
 </body>
 </html>
