@@ -39,8 +39,10 @@
         </a-assets>
 
         <!-- Contenedor único que recibirá el modelo dinámicamente -->
-        <a-entity id="anclaje-espacial" position="0 -0.5 -2.5">
-            <a-entity id="modelo-activo" gltf-model="" scale="0.2 0.2 0.2" rotation="0 45 0"></a-entity>
+        <!-- Modificamos la posición del contenedor: -->
+        <!-- Y = -1.6 (lo baja más hacia el piso real) | Z = -3 (lo aleja un metro más para verlo mejor de cuerpo entero) -->
+        <a-entity id="anclaje-espacial" position="0 -1.6 -3">
+            <a-entity id="modelo-activo" gltf-model="" scale="1 1 1" rotation="0 45 0"></a-entity>
         </a-entity>
 
         <a-entity light="type: ambient; intensity: 0.8;"></a-entity>
@@ -49,46 +51,42 @@
         
     </a-scene>
 
-  <script>
+<script>
     window.addEventListener('DOMContentLoaded', () => {
         const cartel = document.getElementById('cartel-estacion');
         const elModelo = document.getElementById('modelo-activo');
 
-        // Leemos el parámetro de la URL (?id=...)
         const urlParams = new URLSearchParams(window.location.search);
         const estacionId = urlParams.get('id');
 
-        // DICCIONARIO CALIBRADO: Aumentamos las escalas para que se vean grandes en tu comedor
+        // ESCALAS MEDIAS AJUSTADAS (Ni gigantes ni milimétricas)
         const estaciones = {
             'dino': { 
                 nombre: 'Estación 1: Parque de los Dinosaurios', 
                 asset: '#dino-glb', 
-                escala: '1.5 1.5 1.5' // Escalado hacia arriba
+                escala: '0.8 0.8 0.8' 
             },
             'mono': { 
-                nombre: 'Estación 2: monito ', 
+                nombre: 'Estación 2: Fauna Autóctona', 
                 asset: '#mono-glb', 
-                escala: '2.0 2.0 2.0' // Si se veía muy chico, duplicamos el tamaño base
+                escala: '1.0 1.0 1.0' // Reducido a la mitad del test anterior
             },
             'planta': { 
-                nombre: 'Estación 3: Flora bla bla', 
+                nombre: 'Estación 3: Flora de la Barda', 
                 asset: '#planta-glb', 
-                escala: '1.8 1.8 1.8' 
+                escala: '0.9 0.9 0.9' 
             }
         };
 
         if (estacionId && estaciones[estacionId]) {
             const datos = estaciones[estacionId];
             cartel.innerText = datos.nombre;
-            
-            // modelo y su nueva escala corregida
             elModelo.setAttribute('gltf-model', datos.asset);
             elModelo.setAttribute('scale', datos.escala);
-            console.log("Cargada estación con escala corregida: " + estacionId);
         } else {
             cartel.innerText = "Estación 1: Parque de los Dinosaurios (Modo Demostración)";
             elModelo.setAttribute('gltf-model', '#dino-glb');
-            elModelo.setAttribute('scale', '1.5 1.5 1.5');
+            elModelo.setAttribute('scale', '0.8 0.8 0.8');
         }
     });
 </script>
