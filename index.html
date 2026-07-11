@@ -68,14 +68,18 @@
     <script>
         const panelDebug = document.getElementById('panel-debug');
 
-        window.addEventListener('gps-camera-update-position', e => {
+        // FUNCIÓN CENTRAL DE RENDERIZADO
+        function actualizarPosicionWebAR(coords) {
+            const userLat = coords.latitude;
+            const userLon = coords.longitude;
+            
             const listaElementos = [
                 { id: 'estacion-dino', label: 'Dino', RangoActivacion: 15 },      
                 { id: 'estacion-mono', label: 'Mono', RangoActivacion: 10 }, 
                 { id: 'estacion-planta', label: 'Planta', RangoActivacion: 8 }     
             ];
 
-            let textoDebug = '<b>Distancias al objetivo:</b><br>';
+            let textoDebug = `<b>Tu GPS actual:</b> ${userLat.toFixed(5)}, ${userLon.toFixed(5)}<br><br><b>Distancias:</b><br>`;
 
             listaElementos.forEach(elemento => {
                 const entidad = document.getElementById(elemento.id);
@@ -85,7 +89,6 @@
                     
                     if (distancia !== undefined && distancia !== null) {
                         const distMetros = Math.round(distancia);
-                        // Agregamos la información al panel de la pantalla
                         textoDebug += `- ${elemento.label}: ${distMetros}m (Rango: ${elemento.RangoActivacion}m)<br>`;
                         
                         if (distancia <= elemento.RangoActivacion) {
@@ -94,13 +97,30 @@
                             entidad.setAttribute('visible', 'false');
                         }
                     } else {
-                        textoDebug += `- ${elemento.label}: Calculando...<br>`;
+                        textoDebug += `- ${elemento.label}: Inicializando coordenadas...<br>`;
                     }
                 }
             });
-
-            // Actualizamos el cartel flotante en tiempo real
             panelDebug.innerHTML = textoDebug;
+        }
+
+        // 1. INTENTO DE ARRANQUE INMEDIATO (Failsafe)
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(position => {
+                console.log("Primer punto GPS obtenido.");
+                actualizarPosicionWebAR(position.coords);
+            }, err => {
+                panelDebug.innerHTML = `Error de GPS Inicial: ${err.message}. Revise los permisos de su navegador.`;
+            }, { enableHighAccuracy: true });
+        }
+
+        // 2. ESCUCHA DE CAMINATA EN TIEMPO REAL
+        window.addEventListener('gps-camera-update-position', e => {
+            console.log("Evento dinámico de AR.js disparado.");
+            // AR.js maneja internamente las coordenadas en el evento, se las pasamos a nuestra función
+            if (e.detail && e.detail.position) {
+                actualizarPosicionWebAR(e.detail.position);
+            }
         });
     </script>
 </body>
