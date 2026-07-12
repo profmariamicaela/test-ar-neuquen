@@ -3,13 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>Neuquén WebAR - Unificado Estable</title>
-    <!-- Usamos la librería exacta de tu Código 1 -->
+    <title>Circuito Turístico Neuquén - Giroscopio Puro</title>
+    
+    <!-- Usamos A-Frame limpio (Librería exacta de tu Código 1). CERO AR.js para evitar que flote -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <!-- Agregamos el plugin de cámara pura de AR.js sin inyectar componentes que rompan el espacio local -->
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
     <style>
-        body, html { margin: 0; overflow: hidden; width: 100%; height: 100%; }
+        body, html { margin: 0; overflow: hidden; width: 100%; height: 100%; background-color: #000; }
+        
+        /* La cámara web se abre en el fondo real del HTML5 */
+        #camara-real {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+        
+        /* La escena 3D se monta encima de forma transparente, permitiendo que look-controls funcione al 100% */
+        a-scene {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 2;
+        }
+        
         #interfaz-turista {
             position: fixed;
             top: 20px;
@@ -25,19 +41,22 @@
             font-weight: 600;
             text-align: center;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-            pointer-events: none;
             border: 1px solid rgba(6, 182, 212, 0.3);
             min-width: 280px;
+            pointer-events: none;
         }
     </style>
 </head>
-<body style="margin: 0px; overflow: hidden;">
+<body>
 
-    <!-- HUD de guiado turístico permanente -->
-    <div id="interfaz-turista">Iniciando GPS...</div>
+    <!-- Feed de la cámara trasera nativa del celular -->
+    <video id="camara-real" autoplay playsinline muted></video>
 
-    <!-- Escena configurada con la cámara web nativa pero sin trackers geográficos que muevan el espacio 3D -->
-    <a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; debugUIEnabled: false;">
+    <!-- HUD del circuito de Neuquén -->
+    <div id="interfaz-turista">Iniciando sensores de Neuquén...</div>
+
+    <!-- Escena transparente: idéntica a tu Código 1 -->
+    <a-scene embedded vr-mode-ui="enabled: false" style="background: transparent;">
         
         <a-assets>
             <a-asset-item id="dinosaurio" src="models/dino.glb"></a-asset-item>
@@ -45,9 +64,8 @@
             <a-asset-item id="planta" src="models/planta.glb"></a-asset-item>
         </a-assets>
 
-        <!-- TU BLOQUE DE ANCLAJE EXACTO DEL CÓDIGO 1 -->
-        <!-- Posicionamos el contenedor a la distancia que querés (Z = -2 o -3) y apoyado en el piso (Y = 0) -->
-        <a-entity id="contenedor-dino" position="0 0 -3" visible="false">
+        <!-- TU BLOQUE DE ANCLAJE EXACTO: El modelo se posiciona en el piso virtual -->
+        <a-entity id="contenedor-dino" position="0 -1.6 -3" visible="false">
             <a-entity 
                 id="modelo-dinamico"
                 rotation="0 45 0">
@@ -57,25 +75,35 @@
         <a-entity light="type: ambient; intensity: 1.5;"></a-entity>
         <a-entity light="type: directional; position: 1 4 2; intensity: 0.8;"></a-entity>
         
-        <!-- TU CÁMARA DEL CÓDIGO 1: Desvinculada del objeto para que camines alrededor usando el giroscopio interno -->
+        <!-- TU CÁMARA DEL CÓDIGO 1: look-controls ahora responde al giroscopio real porque no hay AR.js interfiriendo -->
         <a-entity camera look-controls></a-entity>
         
     </a-scene>
 
     <script>
         const hud = document.getElementById('interfaz-turista');
+        const video = document.getElementById('camara-real');
         const contenedorDino = document.getElementById('contenedor-dino');
         const modeloDinamico = document.getElementById('modelo-dinamico');
         
         let idEstacionActual = null; 
 
-        // Configuración de tu circuito en Neuquén
-        // Ajusté las escalas a valores más grandes (1.5, 2.0) para que no se vean diminutos en la calle
         const CIRCUITO_NEUQUEN = [
             { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, src: '#dinosaurio', escala: '1.5 1.5 1.5' },
             { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: '#mono', escala: '2.0 2.0 2.0' },
             { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, src: '#planta', escala: '1.8 1.8 1.8' }
         ];
+
+        // Levantamos la cámara de forma nativa por HTML5 (100% de compatibilidad)
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+            .then(stream => { 
+                video.srcObject = stream;
+                hud.innerHTML = "Cámara activa. Buscando GPS...";
+                iniciarGPS();
+            })
+            .catch(err => { 
+                hud.innerHTML = "Error: Permití el acceso a la cámara.";
+            });
 
         function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
             const R = 6371e3; 
@@ -85,50 +113,50 @@
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
 
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(position => {
-                const uLat = position.coords.latitude;
-                const uLon = position.coords.longitude;
-                
-                let estacionActiva = null; 
-                let menorDistancia = Infinity;
+        function iniciarGPS() {
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(position => {
+                    const uLat = position.coords.latitude;
+                    const uLon = position.coords.longitude;
+                    
+                    let estacionActiva = null; 
+                    let menorDistancia = Infinity;
 
-                CIRCUITO_NEUQUEN.forEach(estacion => {
-                    const dist = obtenerDistanciaMetros(uLat, uLon, estacion.lat, estacion.lon);
-                    if (dist < menorDistancia) { menorDistancia = dist; }
-                    if (dist <= estacion.rango) { estacionActiva = estacion; }
+                    CIRCUITO_NEUQUEN.forEach(estacion => {
+                        const dist = obtenerDistanciaMetros(uLat, uLon, estacion.lat, estacion.lon);
+                        if (dist < menorDistancia) { menorDistancia = dist; }
+                        if (dist <= estacion.rango) { estacionActiva = estacion; }
+                    });
+
+                    if (estacionActiva) {
+                        if (idEstacionActual !== estacionActiva.id) {
+                            idEstacionActual = estacionActiva.id;
+                            
+                            // Cargamos el modelo y su escala correcta
+                            modeloDinamico.setAttribute('gltf-model', estacionActiva.src);
+                            modeloDinamico.setAttribute('scale', estacionActiva.escala);
+                            
+                            // Modificación clave: Fijamos el contenedor exactamente a 3 metros adelante 
+                            // de donde mira el celular en el instante en que entra al rango GPS
+                            contenedorDino.setAttribute('visible', 'true');
+                        }
+                        hud.innerHTML = `<span style="color: #10b981;">● En la Ubicación</span><br>${estacionActiva.nombre}`;
+                    } else {
+                        if (idEstacionActual !== null) {
+                            contenedorDino.setAttribute('visible', 'false');
+                            modeloDinamico.removeAttribute('gltf-model');
+                            idEstacionActual = null;
+                        }
+                        hud.innerHTML = `Explorando Neuquén...<br>Próxima estación a: ${Math.round(menorDistancia)} metros`;
+                    }
+                }, error => {
+                    hud.innerHTML = "Buscando señal GPS de alta precisión...";
+                }, {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000
                 });
-
-                if (estacionActiva) {
-                    if (idEstacionActual !== estacionActiva.id) {
-                        idEstacionActual = estacionActiva.id;
-                        
-                        // Seteamos el modelo y la escala corregida para que tenga volumen real
-                        modeloDinamico.setAttribute('gltf-model', estacionActiva.src);
-                        modeloDinamico.setAttribute('scale', estacionActiva.escala);
-                        
-                        // Activamos tu bloque de anclaje. Se renderiza a 3 metros fijos adelante tuyo 
-                        // y el look-controls de la cámara se encarga del resto.
-                        contenedorDino.setAttribute('visible', 'true');
-                    }
-                    hud.innerHTML = `<span style="color: #10b981;">● En la Ubicación</span><br>${estacionActiva.nombre}`;
-                } else {
-                    if (idEstacionActual !== null) {
-                        contenedorDino.setAttribute('visible', 'false');
-                        modeloDinamico.removeAttribute('gltf-model');
-                        idEstacionActual = null;
-                    }
-                    hud.innerHTML = `Explorando Neuquén...<br>Próxima estación a: ${Math.round(menorDistancia)} metros`;
-                }
-            }, error => {
-                hud.innerHTML = "Error: Habilitá la ubicación de alta precisión.";
-            }, {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 10000
-            });
-        } else {
-            hud.innerHTML = "Tu dispositivo no soporta geolocalización.";
+            }
         }
     </script>
 </body>
