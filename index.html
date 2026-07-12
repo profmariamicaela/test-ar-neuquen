@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>Circuito Turístico Neuquén - WebAR</title>
-    <!-- Motores gráficos estables para WebAR -->
+    <title>Circuito Turístico Neuquén - WebAR Local Lock</title>
+    <!-- Motores gráficos estables -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
@@ -31,51 +31,67 @@
 </head>
 <body style="margin: 0px; overflow: hidden;">
 
-    <!-- HUD de la barda de Neuquén -->
     <div id="interfaz-turista">Sincronizando satélites GPS...</div>
 
-    <!-- CORRECCIÓN CRÍTICA: Inicializamos AR.js configurando el motor de posicionamiento inercial -->
-    <a-scene 
-        embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" 
-        vr-mode-ui="enabled: false">
+    <script>
+        // COMPONENTE PERSONALIZADO: Congela el objeto en el espacio tridimensional absoluto
+        AFRAME.registerComponent('anclaje-estatico', {
+            init: function () {
+                // Al nacer el objeto, detectamos dónde está mirando el usuario
+                var camaraEl = document.querySelector('[camera]');
+                var cameraPosition = new THREE.Vector3();
+                var cameraDirection = new THREE.Vector3();
+                
+                // Extraemos la posición y dirección exacta de la cámara del celular
+                camaraEl.object3D.getWorldPosition(cameraPosition);
+                camaraEl.object3D.getWorldDirection(cameraDirection);
+                
+                // Calculamos un punto fijo en el piso a 3 metros adelante de donde miras
+                // Multiplicamos por -3 en el eje Z de la cámara
+                var puntoFijoX = cameraPosition.x + (cameraDirection.x * -3);
+                var puntoFijoZ = cameraPosition.z + (cameraDirection.z * -3);
+                
+                // Forzamos al objeto a clavarse en esa coordenada del mundo de forma absoluta
+                this.el.object3D.position.set(puntoFijoX, -1.6, puntoFijoZ);
+                
+                // Bloqueamos su matriz de transformación para que no escuche actualizaciones de la cámara
+                this.el.object3D.matrixAutoUpdate = false;
+                this.el.object3D.updateMatrix();
+                
+                console.log("Matriz congelada. Objeto soldado al terreno de Neuquén.");
+            }
+        });
+    </script>
+
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
         
-        <!-- Contenedor Maestro: Al usar 'gps-entity-place', AR.js amarra matemáticamente este bloque 
-             a un punto del planeta en coordenadas reales, independizándolo del lente de tu cámara -->
-        <a-entity id="estacion-anclada" gps-entity-place="latitude: 0; longitude: 0;">
-            <!-- Acá inyectaremos el modelo que simulará estar físicamente clavado en el piso -->
-            <!-- Ajustamos la posición relativa interna a Y = -1 para apoyarlo en la visual del suelo -->
-            <a-entity id="contenedor-render" position="0 -1.0 0"></a-entity>
-        </a-entity>
+        <!-- El escenario se mantiene limpio. El script inyectará el modelo con el componente de congelamiento -->
+        <a-entity id="escenario-fijo"></a-entity>
 
         <a-entity light="type: ambient; intensity: 1.2;"></a-entity>
         <a-entity light="type: directional; position: 1 4 2; intensity: 0.8;"></a-entity>
         
-        <!-- Cámara con lector de rotación y sistema inercial de GPS coordinados -->
+        <!-- Lector inercial activo -->
         <a-entity camera look-controls rotation-reader></a-entity>
         
     </a-scene>
 
     <script>
         const hud = document.getElementById('interfaz-turista');
-        const anclajeGps = document.getElementById('estacion-anclada');
-        const contenedorRender = document.getElementById('contenedor-render');
+        const escenarioFijo = document.getElementById('escenario-fijo');
         
         let idEstacionActual = null; 
 
-        // MATRIZ DE COORDENADAS CON TUS PUNTOS DE TESTEO PARQUE AVELLANEDA
         const CIRCUITO_NEUQUEN = [
             { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, src: 'models/dino.glb', escala: '0.8 0.8 0.8' },
             { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: 'models/mono.glb', escala: '1.0 1.0 1.0' },
-            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64303003650104, lon: -58.471023920994114, rango: 15, src: 'models/planta.glb', escala: '0.9 0.9 0.9' }
+            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, src: 'models/planta.glb', escala: '0.9 0.9 0.9' }
         ];
 
         function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
             const R = 6371e3; 
-            const p1 = lat1 * Math.PI / 180;
-            const p2 = lat2 * Math.PI / 180;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const p1 = lat1 * Math.PI / 180; const p2 = lat2 * Math.PI / 180;
+            const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dLon/2) * Math.sin(dLon/2);
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
@@ -85,56 +101,42 @@
                 const uLat = position.coords.latitude;
                 const uLon = position.coords.longitude;
                 
-                let estacionActiva = null;
-                let menorDistancia = Infinity;
+                let estacionActiva = null; let menorDistancia = Infinity;
 
                 CIRCUITO_NEUQUEN.forEach(estacion => {
                     const dist = obtenerDistanciaMetros(uLat, uLon, estacion.lat, estacion.lon);
-                    if (dist < menorDistancia) {
-                        menorDistancia = dist;
-                    }
-                    if (dist <= estacion.rango) {
-                        estacionActiva = estacion;
-                    }
+                    if (dist < menorDistancia) { menorDistancia = dist; }
+                    if (dist <= estacion.rango) { estacionActiva = estacion; }
                 });
 
                 if (estacionActiva) {
                     if (idEstacionActual !== estacionActiva.id) {
                         idEstacionActual = estacionActiva.id;
-                        console.log(`Fijando anclaje geográfico para: ${estacionActiva.id}`);
                         
-                        // 1. Desplazamos dinámicamente el anclaje virtual del mundo a la coordenada exacta del elemento
-                        anclajeGps.setAttribute('gps-entity-place', `latitude: ${estacionActiva.lat}; longitude: ${estacionActiva.lon};`);
+                        escenarioFijo.innerHTML = "";
                         
-                        // 2. Limpiamos la GPU e inyectamos el nodo del modelo tridimensional
-                        contenedorRender.innerHTML = "";
-                        
+                        // Generamos el nodo
                         const nuevoModelo = document.createElement('a-entity');
                         nuevoModelo.setAttribute('gltf-model', estacionActiva.src);
                         nuevoModelo.setAttribute('scale', estacionActiva.escala);
                         nuevoModelo.setAttribute('rotation', '0 45 0');
                         
-                        contenedorRender.appendChild(nuevoModelo);
+                        // INYECTAMOS EL CONGELADOR ACÁ:
+                        nuevoModelo.setAttribute('anclaje-estatico', '');
+                        
+                        escenarioFijo.appendChild(nuevoModelo);
                     }
-                    
                     hud.innerHTML = `<span style="color: #10b981;">● En la Ubicación</span><br>${estacionActiva.nombre}`;
                 } else {
                     if (idEstacionActual !== null) {
-                        console.log("Removiendo de la escena (Fuera de rango)");
-                        contenedorRender.innerHTML = "";
+                        escenarioFijo.innerHTML = "";
                         idEstacionActual = null;
                     }
                     hud.innerHTML = `Explorando Neuquén...<br>Próximo punto de interés a: ${Math.round(menorDistancia)} metros`;
                 }
             }, error => {
-                hud.innerHTML = "Error: Habilitá la ubicación precisa en tu dispositivo.";
-            }, {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 10000
-            });
-        } else {
-            hud.innerHTML = "Dispositivo incompatible con sistemas de posicionamiento global.";
+                hud.innerHTML = "Error: Habilitá la ubicación precisa.";
+            }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         }
     </script>
 </body>
