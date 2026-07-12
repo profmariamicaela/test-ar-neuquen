@@ -3,77 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Neuquén WebAR - Circuito Turístico</title>
+    <title>Neuquén WebAR - Circuito Unificado Estable</title>
     <!-- A-Frame para WebXR nativo (Tu librería del Código 1) -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <style>
-        body, html { margin: 0; overflow: hidden; width: 100%; height: 100%; font-family: system-ui, -apple-system, sans-serif; background-color: #0f172a; }
+        body, html { margin: 0; overflow: hidden; width: 100%; height: 100%; }
         
-        /* Pantalla de guía GPS intermedia */
-        #pantalla-guia {
+        /* HUD superior flotante: se dibuja por encima del canvas de WebXR */
+        #interfaz-turista {
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: rgba(15, 23, 42, 0.95);
             color: #06b6d4;
-            z-index: 99999;
+            padding: 15px 25px;
+            border-radius: 30px;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 14px;
+            font-weight: 600;
             text-align: center;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .btn-buscar {
-            background: #06b6d4; color: #fff; border: none; padding: 15px 30px; 
-            border-radius: 30px; font-weight: bold; font-size: 16px; margin-top: 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            min-width: 280px;
+            pointer-events: none;
         }
     </style>
 </head>
-<body>
+<body style="margin: 0px; overflow: hidden;">
 
-    <!-- Esta pantalla maneja al turista mientras camina por Neuquén -->
-    <div id="pantalla-guia">
-        <h2 id="texto-estado">Iniciando GPS de Neuquén...</h2>
-        <p id="texto-distancia">Esperando señal de satélite de alta precisión...</p>
-    </div>
+    <!-- HUD de guiado e instrucciones siempre visible -->
+    <div id="interfaz-turista">Iniciando sensores de Neuquén...</div>
 
-    <!-- TU ESCENA EXACTA DEL CÓDIGO 1 (Empieza oculta con un div para que no interfiera) -->
-    <div id="contenedor-ar" style="display: none; width: 100%; height: 100%;">
-        <a-scene webxr="optionalFeatures: hit-test, local-floor;" arjs="sourceType: webcam; debugUIEnabled: false;">
-            
-            <a-assets id="assets-pool">
-                <!-- Los assets se inyectarán acá dinámicamente según la estación -->
-            </a-assets>
+    <!-- TU ESCENA EXACTA DEL CÓDIGO 1 (Siempre activa para que cargue los modelos de entrada) -->
+    <a-scene webxr="optionalFeatures: hit-test, local-floor;" arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+        
+        <a-assets>
+            <!-- Pre-cargamos todos los modelos del circuito en Neuquén de entrada -->
+            <a-asset-item id="dinosaurio" src="dino.glb"></a-asset-item>
+            <a-asset-item id="mono" src="mono.glb"></a-asset-item>
+            <a-asset-item id="planta" src="planta.glb"></a-asset-item>
+        </a-assets>
 
-            <!-- TU BLOQUE DE ANCLAJE EXACTO DEL CÓDIGO 1 -->
-            <a-entity id="contenedor-dino" position="0 0 -2">
-                <a-entity 
-                    id="modelo-turistico"
-                    scale="0.2 0.2 0.2"
-                    rotation="0 45 0">
-                </a-entity>
+        <!-- TU BLOQUE DE ANCLAJE EXACTO DEL CÓDIGO 1 -->
+        <!-- Inicializa invisible para ocultar los objetos hasta que estés en las coordenadas -->
+        <a-entity id="contenedor-dino" position="0 0 -2" visible="false">
+            <a-entity 
+                id="modelo-turistico"
+                scale="0.2 0.2 0.2"
+                rotation="0 45 0">
             </a-entity>
+        </a-entity>
 
-            <!-- TU CÁMARA EXACTA DEL CÓDIGO 1 -->
-            <a-entity camera look-controls></a-entity>
-            
-        </a-scene>
-    </div>
+        <!-- TU CÁMARA EXACTA DEL CÓDIGO 1 -->
+        <a-entity camera look-controls></a-entity>
+        
+    </a-scene>
 
     <script>
-        const pantallaGuia = document.getElementById('pantalla-guia');
-        const contenedorAR = document.getElementById('contenedor-ar');
-        const textoEstado = document.getElementById('texto-estado');
-        const textoDistancia = document.getElementById('texto-distancia');
-        
-        const assetsPool = document.getElementById('assets-pool');
+        const hud = document.getElementById('interfaz-turista');
+        const contenedorDino = document.getElementById('contenedor-dino');
         const modeloTuristico = document.getElementById('modelo-turistico');
+        
+        let idEstacionActual = null;
 
-        let arIniciado = false;
-
-        // El circuito con tus coordenadas y los nombres de tus archivos .glb
+        // Configuración de las estaciones del circuito de Neuquén
         const CIRCUITO_NEUQUEN = [
-            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, file: 'dino.glb' },
-            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, file: 'mono.glb' },
-            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, file: 'planta.glb' }
+            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, selector: '#dinosaurio' },
+            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, selector: '#mono' },
+            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, selector: '#planta' }
         ];
 
         function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
@@ -85,6 +84,8 @@
         }
 
         if (navigator.geolocation) {
+            hud.innerHTML = "Buscando satélites GPS...";
+            
             navigator.geolocation.watchPosition(position => {
                 const uLat = position.coords.latitude;
                 const uLon = position.coords.longitude;
@@ -99,38 +100,33 @@
                 });
 
                 if (estacionActiva) {
-                    // SI LLEGÓ A LA UBICACIÓN:
-                    if (!arIniciado) {
-                        arIniciado = true;
+                    if (idEstacionActual !== estacionActiva.id) {
+                        idEstacionActual = estacionActiva.id;
                         
-                        // 1. Configuramos el asset y el modelo de forma limpia antes de prender la escena
-                        assetsPool.innerHTML = `<a-asset-item id="item-dinamico" src="${estacionActiva.file}"></a-asset-item>`;
-                        modeloTuristico.setAttribute('gltf-model', '#item-dinamico');
+                        // Vinculamos el modelo usando la referencia que YA está cargada en memoria
+                        modeloTuristico.setAttribute('gltf-model', estacionActiva.selector);
                         
-                        // 2. Apagamos la pantalla GPS y encendemos TU CÓDIGO 1 intacto
-                        pantallaGuia.style.display = 'none';
-                        contenedorAR.style.display = 'block';
+                        // Mostramos el contenedor en tus coordenadas locales exactas (0 0 -2)
+                        contenedorDino.setAttribute('visible', 'true');
                     }
+                    hud.innerHTML = `<span style="color: #10b981;">● En la Ubicación</span><br>${estacionActiva.nombre}<br><span style="font-size: 11px; color: #fff;">Iniciá AR en el botón inferior si no cargó</span>`;
                 } else {
-                    // SI ESTÁ LEJOS:
-                    arIniciado = false;
-                    contenedorAR.style.display = 'none';
-                    pantallaGuia.style.display = 'flex';
-                    
-                    textoEstado.innerHTML = "Explorando circuito turístico de Neuquén";
-                    textoDistancia.innerHTML = `Camina hacia la barda. Próxima estación a: <br><strong style="font-size:24px; color:#fff;">${Math.round(menorDistancia)} metros</strong>`;
+                    if (idEstacionActual !== null) {
+                        contenedorDino.setAttribute('visible', 'false');
+                        modeloTuristico.removeAttribute('gltf-model');
+                        idEstacionActual = null;
+                    }
+                    hud.innerHTML = `Explorando Neuquén...<br>Próxima estación a: ${Math.round(menorDistancia)} metros`;
                 }
             }, error => {
-                textoEstado.innerHTML = "Error de GPS";
-                textoDistancia.innerHTML = "Por favor, activa la ubicación de alta precisión de tu celular para iniciar el recorrido.";
+                hud.innerHTML = "Señal de GPS baja. Asegurate de estar en exteriores.";
             }, {
                 enableHighAccuracy: true,
                 maximumAge: 0,
-                timeout: 12000
+                timeout: 10000
             });
         } else {
-            textoEstado.innerHTML = "Dispositivo no compatible";
-            textoDistancia.innerHTML = "Tu navegador no soporta geolocalización nativa.";
+            hud.innerHTML = "Tu dispositivo no soporta geolocalización.";
         }
     </script>
 </body>
