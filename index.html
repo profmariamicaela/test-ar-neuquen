@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <title>Circuito Turístico Neuquén - WebAR</title>
-    <!-- Motores gráficos estables y con soporte de orientación corregido -->
+    <!-- Motores gráficos estables para WebAR -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
@@ -31,31 +31,39 @@
 </head>
 <body style="margin: 0px; overflow: hidden;">
 
-    <!-- HUD del circuito de Neuquén -->
+    <!-- HUD de la barda de Neuquén -->
     <div id="interfaz-turista">Sincronizando satélites GPS...</div>
 
-    <!-- Inicializamos la escena fijando el tracking en modo óptico/giroscópico puro para clavar los objetos -->
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" vr-mode-ui="enabled: false">
+    <!-- CORRECCIÓN CRÍTICA: Inicializamos AR.js configurando el motor de posicionamiento inercial -->
+    <a-scene 
+        embedded 
+        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" 
+        vr-mode-ui="enabled: false">
         
-        <!-- Contenedor Maestro de Referencia Espacial Fija (Eje Z = 3 metros adelante) -->
-        <a-entity id="escenario-fijo" position="0 -1.6 -3"></a-entity>
+        <!-- Contenedor Maestro: Al usar 'gps-entity-place', AR.js amarra matemáticamente este bloque 
+             a un punto del planeta en coordenadas reales, independizándolo del lente de tu cámara -->
+        <a-entity id="estacion-anclada" gps-entity-place="latitude: 0; longitude: 0;">
+            <!-- Acá inyectaremos el modelo que simulará estar físicamente clavado en el piso -->
+            <!-- Ajustamos la posición relativa interna a Y = -1 para apoyarlo en la visual del suelo -->
+            <a-entity id="contenedor-render" position="0 -1.0 0"></a-entity>
+        </a-entity>
 
         <a-entity light="type: ambient; intensity: 1.2;"></a-entity>
         <a-entity light="type: directional; position: 1 4 2; intensity: 0.8;"></a-entity>
         
-        <!-- Sincroniza la cámara con el lector de orientación del dispositivo móvil para fijar el anclaje -->
+        <!-- Cámara con lector de rotación y sistema inercial de GPS coordinados -->
         <a-entity camera look-controls rotation-reader></a-entity>
         
     </a-scene>
 
     <script>
         const hud = document.getElementById('interfaz-turista');
-        const escenarioFijo = document.getElementById('escenario-fijo');
+        const anclajeGps = document.getElementById('estacion-anclada');
+        const contenedorRender = document.getElementById('contenedor-render');
         
-        // Control interno para saber qué ID se está reproduciendo en la GPU
         let idEstacionActual = null; 
 
-        // MATRIZ DE COORDENADAS CON PUNTOS DE TESTEO PARQUE AVELLANEDA
+        // MATRIZ DE COORDENADAS CON TUS PUNTOS DE TESTEO PARQUE AVELLANEDA
         const CIRCUITO_NEUQUEN = [
             { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, src: 'models/dino.glb', escala: '0.8 0.8 0.8' },
             { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: 'models/mono.glb', escala: '1.0 1.0 1.0' },
@@ -91,31 +99,29 @@
                 });
 
                 if (estacionActiva) {
-                    // Si entramos a un punto y es DISTINTO al que ya estaba cargado en memoria
                     if (idEstacionActual !== estacionActiva.id) {
                         idEstacionActual = estacionActiva.id;
-                        console.log(`Cambiando de estación de forma automática a: ${estacionActiva.id}`);
+                        console.log(`Fijando anclaje geográfico para: ${estacionActiva.id}`);
                         
-                        // CORRECCIÓN 2: Vaciamos el contenedor borrando los nodos viejos de la memoria gráfica
-                        escenarioFijo.innerHTML = "";
+                        // 1. Desplazamos dinámicamente el anclaje virtual del mundo a la coordenada exacta del elemento
+                        anclajeGps.setAttribute('gps-entity-place', `latitude: ${estacionActiva.lat}; longitude: ${estacionActiva.lon};`);
                         
-                        // Generamos una entidad limpia e inyectamos el modelo forzando el render inmediato
-                        const nuevaEntidad = document.createElement('a-entity');
-                        nuevaEntidad.setAttribute('id', 'modelo-renderizado');
-                        nuevaEntidad.setAttribute('gltf-model', estacionActiva.src);
-                        nuevaEntidad.setAttribute('scale', estacionActiva.escala);
-                        // Agregamos una rotación inicial estable
-                        nuevaEntidad.setAttribute('rotation', '0 45 0'); 
+                        // 2. Limpiamos la GPU e inyectamos el nodo del modelo tridimensional
+                        contenedorRender.innerHTML = "";
                         
-                        escenarioFijo.appendChild(nuevaEntidad);
+                        const nuevoModelo = document.createElement('a-entity');
+                        nuevoModelo.setAttribute('gltf-model', estacionActiva.src);
+                        nuevoModelo.setAttribute('scale', estacionActiva.escala);
+                        nuevoModelo.setAttribute('rotation', '0 45 0');
+                        
+                        contenedorRender.appendChild(nuevoModelo);
                     }
                     
                     hud.innerHTML = `<span style="color: #10b981;">● En la Ubicación</span><br>${estacionActiva.nombre}`;
                 } else {
-                    // FUERA DE RANGO: Si nos alejamos caminando, limpiamos el escenario este FUNCA OK 
                     if (idEstacionActual !== null) {
-                        console.log("Limpiando escenario gráfico (Fuera de rango)");
-                        escenarioFijo.innerHTML = "";
+                        console.log("Removiendo de la escena (Fuera de rango)");
+                        contenedorRender.innerHTML = "";
                         idEstacionActual = null;
                     }
                     hud.innerHTML = `Explorando Neuquén...<br>Próximo punto de interés a: ${Math.round(menorDistancia)} metros`;
@@ -128,7 +134,7 @@
                 timeout: 10000
             });
         } else {
-            hud.innerHTML = "Tu hardware no soporta geolocalización nativa.";
+            hud.innerHTML = "Dispositivo incompatible con sistemas de posicionamiento global.";
         }
     </script>
 </body>
