@@ -3,23 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>Circuito Turístico Neuquén - WebAR Estable</title>
+    <title>Circuito Turístico Neuquén - Prueba mixta</title>
     <!-- Motor gráfico Core estable -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <style>
         body, html { margin: 0; overflow: hidden; width: 100%; height: 100%; background-color: #000; }
         
-        #video-fondo {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover;
-            z-index: 1;
-        }
-        a-scene {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 2;
-        }
         #interfaz-turista {
             position: fixed;
             top: 20px;
@@ -43,34 +32,11 @@
 </head>
 <body>
 
-    <!-- Transmisión de cámara web nativa (Siempre activa) -->
-    <video id="video-fondo" autoplay playsinline muted></video>
-
-    <!-- HUD de guiado turístico permanente -->
+    <!-- HUD de guiado turístico permanente por encima de la escena de RA -->
     <div id="interfaz-turista">Buscando satélites GPS...</div>
 
-    <script>
-        // COMPONENTE DE INGENIERÍA: Desvincula la matriz del modelo del movimiento de la cámara
-        AFRAME.registerComponent('anclaje-fijo', {
-            init: function () {
-                this.el.addEventListener('model-loaded', () => {
-                    // Esperamos un ciclo de renderizado para calcular la posición estática
-                    setTimeout(() => {
-                        const escenario = document.getElementById('escenario-fijo').object3D;
-                        
-                        // Forzamos el cálculo de la posición en el mundo absoluto de Three.js
-                        escenario.updateMatrixWorld(true);
-                        
-                        // Congelamos la matriz de transformación. El objeto ya no sigue al lente.
-                        escenario.matrixAutoUpdate = false;
-                        console.log("Anclaje local bloqueado con éxito. Modelo soldado al piso virtual.");
-                    }, 100);
-                });
-            }
-        });
-    </script>
-
-    <a-scene vr-mode-ui="enabled: false" embedded style="background: transparent;">
+    <!-- Escena nativa WebXR para asegurar el anclaje perfecto al piso (local-floor) /no es el mismo del repo neuquenArprueba-->
+    <a-scene webxr="optionalFeatures: hit-test, local-floor;" arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
         
         <a-assets>
             <a-asset-item id="dino-glb" src="models/dino.glb"></a-asset-item>
@@ -78,15 +44,15 @@
             <a-asset-item id="planta-glb" src="models/planta.glb"></a-asset-item>
         </a-assets>
 
-        <!-- Contenedor Maestro: Le agregamos el componente de anclaje estático -->
-        <a-entity id="escenario-fijo" position="0 -1.6 -3.5" anclaje-fijo>
-            <a-entity id="modelo-renderizado" rotation="0 45 0"></a-entity>
+        <!-- Contenedor Maestro: Posicionado a 0 metros de altura sobre el suelo real y 3 metros adelante /dependera del celu  -->
+        <a-entity id="escenario-fijo" position="0 0 -3">
+            <a-entity id="modelo-renderizado" rotation="0 45 0" visible="false"></a-entity>
         </a-entity>
 
         <a-entity light="type: ambient; intensity: 1.2;"></a-entity>
         <a-entity light="type: directional; position: 1 4 2; intensity: 0.8;"></a-entity>
         
-        <!-- look-controls es obligatorio para que el giroscopio mueva tu perspectiva alrededor del objeto -->
+        <!-- Cámara desvinculada del objeto: Permite caminar alrededor usando el giroscopio nativo del navegador -->
         <a-entity camera look-controls></a-entity>
         
     </a-scene>
@@ -95,20 +61,17 @@
         const hud = document.getElementById('interfaz-turista');
         const renderObjeto = document.getElementById('modelo-renderizado');
         const escenarioFijo = document.getElementById('escenario-fijo');
-        const video = document.getElementById('video-fondo');
         
         let idEstacionActual = null; 
 
+        // Circuito de geolocalización
         const CIRCUITO_NEUQUEN = [
-            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363,  rango: 20, src: 'models/dino.glb', escala: '0.8 0.8 0.8' },
-            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: 'models/mono.glb', escala: '1.0 1.0 1.0' },
-            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, src: 'models/planta.glb', escala: '0.9 0.9 0.9' }
+            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, src: '#dino-glb', escala: '0.2 0.2 0.2' },
+            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: '#mono-glb', escala: '0.3 0.3 0.3' },
+            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, src: '#planta-glb', escala: '0.2 0.2 0.2' }
         ];
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => { hud.innerHTML = "Error: Permití el acceso a la cámara."; });
-
+        // Cálculo de distancias mediante fórmula de Haversine
         function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
             const R = 6371e3; 
             const p1 = lat1 * Math.PI / 180; const p2 = lat2 * Math.PI / 180;
@@ -134,20 +97,17 @@
                 if (estacionActiva) {
                     if (idEstacionActual !== estacionActiva.id) {
                         idEstacionActual = estacionActiva.id;
-                        console.log(`Inyectando de forma automática: ${estacionActiva.id}`);
+                        console.log(`Cargando escenario: ${estacionActiva.id}`);
                         
-                        // Reactivamos las actualizaciones de matriz para que el contenedor acepte el nuevo modelo
-                        escenarioFijo.object3D.matrixAutoUpdate = true;
-                        
-                        renderObjeto.removeAttribute('gltf-model');
-                        setTimeout(() => {
-                            renderObjeto.setAttribute('gltf-model', estacionActiva.src);
-                            renderObjeto.setAttribute('scale', estacionActiva.escala);
-                        }, 50);
+                        // Modificamos el modelo usando las referencias cargadas en a-assets para acelerar el render
+                        renderObjeto.setAttribute('gltf-model', estacionActiva.src);
+                        renderObjeto.setAttribute('scale', estacionActiva.escala);
+                        renderObjeto.setAttribute('visible', 'true');
                     }
                     hud.innerHTML = `<span style="color: #10b981;">● En la Ubicación</span><br>${estacionActiva.nombre}`;
                 } else {
                     if (idEstacionActual !== null) {
+                        renderObjeto.setAttribute('visible', 'false');
                         renderObjeto.removeAttribute('gltf-model');
                         idEstacionActual = null;
                     }
