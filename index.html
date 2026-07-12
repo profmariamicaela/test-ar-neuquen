@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>Circuito Turístico Neuquén - WebXR Nativo</title>
-    <!-- Motor gráfico Core estable en su versión de compatibilidad WebXR extendida -->
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <title>Circuito Turístico Neuquén - WebAR Final</title>
+    
+    <!-- Componentes de arquitectura estables para proyección de cámara continua -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
     <style>
         #interfaz-turista {
             position: fixed;
@@ -30,43 +33,48 @@
 </head>
 <body style="margin: 0px; overflow: hidden;">
 
-    <!-- HUD que guía al usuario por las coordenadas de Neuquén -->
-    <div id="interfaz-turista">Sincronizando satélites GPS...</div>
+    <!-- HUD unificado: Nunca se va a apagar ni ocultar -->
+    <div id="interfaz-turista">Inicializando sensores de posición...</div>
 
-    <!-- CORRECCIÓN MAESTRA: Forzamos la inicialización de la API nativa de Realidad Aumentada y el botón XR inferior -->
+    <!-- Escena continua: arjs maneja la cámara web de fondo de forma permanente sin botones de salida -->
     <a-scene 
-        webxr="optionalFeatures: hit-test, local-floor; requiredFeatures: local-floor;" 
-        renderer="colorManagement: true;" 
-        xr-mode-ui="enabled: true;">
+        embedded 
+        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" 
+        vr-mode-ui="enabled: false">
         
-        <!-- El escenario se posiciona a la altura estimada del piso real (-1.6 metros del nivel del ojo) -->
-        <a-entity id="escenario-fijo" position="0 -1.6 -3.5">
-            <a-entity id="modelo-renderizado" rotation="0 45 0"></a-entity>
+        <a-assets>
+            <a-asset-item id="dino-glb" src="models/dino.glb"></a-asset-item>
+            <a-asset-item id="mono-glb" src="models/mono.glb"></a-asset-item>
+            <a-asset-item id="planta-glb" src="models/planta.glb"></a-asset-item>
+        </a-assets>
+
+        <!-- ENTIDAD DINÁMICA GEOLOCALIZADA: AR.js calcula su posición cartesiana en base al norte magnético y al GPS del celular -->
+        <a-entity id="nodo-geolocalizado" position="0 0 0" visible="false">
+            <a-entity id="modelo-renderizado" rotation="0 180 0"></a-entity>
         </a-entity>
 
-        <!-- Iluminación para exteriores en las bardas -->
-        <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
-        <a-entity light="type: directional; position: 1 4 2; intensity: 0.8;"></a-entity>
-        
-        <!-- Cámara vinculada a los controles inerciales del hardware del celular -->
-        <a-entity camera look-controls></a-entity>
+        <!-- Cámara de Tracking Continuo: Sincroniza el GPS del celular con el renderizador 3D segundo a segundo -->
+        <a-entity 
+            camera 
+            gps-camera="simulateLatitude: 0; simulateLongitude: 0; positionMinAccuracy: 3; alertRadius: 50;" 
+            rotation-reader>
+        </a-entity>
         
     </a-scene>
 
     <script>
         const hud = document.getElementById('interfaz-turista');
-        const escenarioFijo = document.getElementById('escenario-fijo');
+        const nodoGeolocalizado = document.getElementById('nodo-geolocalizado');
         const renderObjeto = document.getElementById('modelo-renderizado');
         
         let idEstacionActual = null; 
 
-        // MATRIZ DE COORDENADAS CON TUS PUNTOS DE TESTEO PARQUE AVELLANEDA
+        // Matriz oficial de tus puntos de testeo
         const CIRCUITO_NEUQUEN = [
-            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, src: 'models/dino.glb', escala: '0.8 0.8 0.8' },
-            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: 'models/mono.glb', escala: '1.0 1.0 1.0' },
-            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, src: 'models/planta.glb', escala: '0.9 0.9 0.9' }
+            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios',  lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, src: '#dino-glb', escala: '0.8 0.8 0.8' },
+            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: '#mono-glb', escala: '1.0 1.0 1.0' },
+            { id: 'planta', nombre: 'Estación 3: Flora Autóctona',lat: -34.64495467831919, lon: -58.47277079022688, rango: 15, src: '#planta-glb', escala: '1.0 1.0 1.0' }
         ];
-
 
         function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
             const R = 6371e3; 
@@ -76,44 +84,51 @@
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
 
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(position => {
-                const uLat = position.coords.latitude;
-                const uLon = position.coords.longitude;
-                
-                let estacionActiva = null; let menorDistancia = Infinity;
+        // Capturamos el evento nativo de actualización de coordenadas de AR.js
+        window.addEventListener('gps-camera-update-position', e => {
+            const uLat = e.detail.position.latitude;
+            const uLon = e.detail.position.longitude;
+            
+            let estacionActiva = null; 
+            let menorDistancia = Infinity;
 
-                CIRCUITO_NEUQUEN.forEach(estacion => {
-                    const dist = obtenerDistanciaMetros(uLat, uLon, estacion.lat, estacion.lon);
-                    if (dist < menorDistancia) { menorDistancia = dist; }
-                    if (dist <= estacion.rango) { estacionActiva = estacion; }
-                });
-
-                if (estacionActiva) {
-                    if (idEstacionActual !== estacionActiva.id) {
-                        idEstacionActual = estacionActiva.id;
-                        console.log(`Inyectando activo en entorno WebXR nativo: ${estacionActiva.id}`);
-                        
-                        // Recarga limpia del nodo para la GPU
-                        renderObjeto.removeAttribute('gltf-model');
-                        setTimeout(() => {
-                            renderObjeto.setAttribute('gltf-model', estacionActiva.src);
-                            renderObjeto.setAttribute('scale', estacionActiva.escala);
-                        }, 50);
-                    }
-                    // Le avisamos al turista que la estación está lista y debe iniciar la RA física
-                    hud.innerHTML = `<span style="color: #10b981;">● Ubicación Detectada</span><br>${estacionActiva.nombre}<br><small style="color: #67e8f9;">Toca el botón "AR" abajo a la derecha</small>`;
-                } else {
-                    if (idEstacionActual !== null) {
-                        renderObjeto.removeAttribute('gltf-model');
-                        idEstacionActual = null;
-                    }
-                    hud.innerHTML = `Explorando Neuquén...<br>Próximo punto de interés a: ${Math.round(menorDistancia)} metros`;
+            CIRCUITO_NEUQUEN.forEach(estacion => {
+                const dist = obtenerDistanciaMetros(uLat, uLon, estacion.lat, estacion.lon);
+                if (dist < menorDistancia) {
+                    menorDistancia = dist;
                 }
-            }, error => {
-                hud.innerHTML = "Error: Habilitá la ubicación precisa en tu dispositivo.";
-            }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-        }
+                if (dist <= estacion.rango) {
+                    estacionActiva = estacion;
+                }
+            });
+
+            if (estacionActiva) {
+                if (idEstacionActual !== estacionActiva.id) {
+                    idEstacionActual = estacionActiva.id;
+                    
+                    // Clavamos el nodo contenedor exactamente en la coordenada planetaria del asset
+                    nodoGeolocalizado.setAttribute('gps-entity-place', `latitude: ${estacionActiva.lat}; longitude: ${estacionActiva.lon};`);
+                    
+                    // Inyectamos el modelo 3D y su escala
+                    renderObjeto.setAttribute('gltf-model', estacionActiva.src);
+                    renderObjeto.setAttribute('scale', estacionActiva.escala);
+                    
+                    // Hacemos el objeto visible en el espacio
+                    nodoGeolocalizado.setAttribute('visible', 'true');
+                }
+                
+                // Mantenemos la indicación en pantalla sin cortar la transmisión de la cámara
+                hud.innerHTML = `<span style="color: #10b981;">● En Ubicación</span><br>${estacionActiva.nombre}`;
+            } else {
+                // Si salimos del rango, el objeto se oculta pero la cámara y la cuenta regresiva siguen vivas en el HUD
+                if (idEstacionActual !== null) {
+                    nodoGeolocalizado.setAttribute('visible', 'false');
+                    renderObjeto.removeAttribute('gltf-model');
+                    idEstacionActual = null;
+                }
+                hud.innerHTML = `Explorando Neuquén...<br>Próxima estación a: ${Math.round(menorDistancia)} metros`;
+            }
+        });
     </script>
 </body>
 </html>
