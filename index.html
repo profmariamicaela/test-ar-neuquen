@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <title>Circuito Turístico Neuquén - WebAR</title>
-    <!-- Motor gráfico estable para el anclaje óptico -->
+    <!-- Motor gráfico estable sin requerimientos WebXR bloqueantes -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <style>
         #interfaz-turista {
@@ -13,7 +13,7 @@
             left: 50%;
             transform: translateX(-50%);
             z-index: 9999;
-            background: rgba(15, 23, 42, 0.9);
+            background: rgba(15, 23, 42, 0.95);
             color: #06b6d4;
             padding: 15px 25px;
             border-radius: 30px;
@@ -21,52 +21,46 @@
             font-size: 14px;
             font-weight: 600;
             text-align: center;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
             pointer-events: none;
-            border: 1px solid rgba(6, 182, 212, 0.2);
+            border: 1px solid rgba(6, 182, 212, 0.3);
             min-width: 280px;
         }
     </style>
 </head>
 <body style="margin: 0px; overflow: hidden;">
 
-    <!-- HUD flotante que guiará al turista en el sendero de Neuquén -->
+    <!-- HUD de guiado en el sendero -->
     <div id="interfaz-turista">Sincronizando satélites GPS...</div>
 
-    <!-- Escena nativa de WebXR. Nace oculta para evitar que el dino flote antes de tiempo -->
-    <a-scene id="escena-ar" webxr="optionalFeatures: hit-test, local-floor;" renderer="colorManagement: true;" visible="false">
+    <!-- La escena se mantiene activa siempre para no congelar la GPU -->
+    <a-scene id="escena-ar" vr-mode-ui="enabled: false" renderer="colorManagement: true;">
         
-        <a-assets>
-            <!-- Repositorio de assets del municipio -->
-            <a-asset-item id="dino-glb" src="models/dino.glb"></a-asset-item>
-            <a-asset-item id="mono-glb" src="models/mono.glb"></a-asset-item>
-            <a-asset-item id="planta-glb" src="models/planta.glb"></a-asset-item>
-        </a-assets>
-
-        <!-- Anclaje espacial calibrado para el nivel del piso óptico -->
+        <!-- El contenedor se mantiene clavado a la altura estimada del piso real -->
         <a-entity id="anclaje-piso" position="0 -1.6 -3">
-            <a-entity id="modelo-dinamico" gltf-model="" scale="1 1 1" rotation="0 45 0"></a-entity>
+            <!-- La entidad nace limpia, sin modelo asignado -->
+            <a-entity id="modelo-dinamico" rotation="0 45 0"></a-entity>
         </a-entity>
 
-        <a-entity light="type: ambient; intensity: 0.9;"></a-entity>
-        <a-entity light="type: directional; position: 1 4 2; intensity: 0.7;"></a-entity>
+        <!-- Iluminación forzada de laboratorio para evitar modelos negros -->
+        <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
+        <a-entity light="type: directional; position: 1 4 2; intensity: 0.8;"></a-entity>
+        
         <a-entity camera look-controls></a-entity>
         
     </a-scene>
 
     <script>
         const hud = document.getElementById('interfaz-turista');
-        const escena = document.getElementById('escena-ar');
         const renderObjeto = document.getElementById('modelo-dinamico');
 
-        // MATRIZ DE COORDENADAS DEL CIRCUITO (Cambiá por tus esquinas de prueba para el test de campo)
+        // MATRIZ DE COORDENADAS CON TUS PUNTOS DE TESTEO
         const CIRCUITO_NEUQUEN = [
-            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, asset: '#dino-glb', escala: '0.8 0.8 0.8' },
-            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, asset: '#mono-glb', escala: '1.0 1.0 1.0' },
-            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64303003650104, lon: -58.471023920994114, rango: 15, asset: '#planta-glb', escala: '0.9 0.9 0.9' }
+            { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios',  lat: -34.64350264084042, lon: -58.47254605523363, rango: 20, src: 'models/dino.glb', escala: '0.8 0.8 0.8' },
+            { id: 'mono', nombre: 'Estación 2: Fauna de la Barda', lat: -34.644489104415065, lon: -58.47366534972228, rango: 20, src: 'models/mono.glb', escala: '1.0 1.0 1.0' },
+            { id: 'planta', nombre: 'Estación 3: Flora Autóctona', lat: -34.64303003650104, lon: -58.471023920994114, rango: 15, src: 'models/planta.glb', escala: '0.9 0.9 0.9' }
         ];
 
-        // Fórmula matemática Haversine para calcular distancia real en metros
         function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
             const R = 6371e3; 
             const p1 = lat1 * Math.PI / 180;
@@ -77,7 +71,6 @@
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
 
-        // Sistema de geolocalización por hardware activo
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(position => {
                 const uLat = position.coords.latitude;
@@ -86,7 +79,6 @@
                 let estacionActiva = null;
                 let menorDistancia = Infinity;
 
-                // Buscamos cuál es la estación más cercana al turista
                 CIRCUITO_NEUQUEN.forEach(estacion => {
                     const dist = obtenerDistanciaMetros(uLat, uLon, estacion.lat, estacion.lon);
                     if (dist < menorDistancia) {
@@ -98,27 +90,35 @@
                 });
 
                 if (estacionActiva) {
-                    // EL TURISTA LLEGÓ A UNA ESTACIÓN: Inicializamos el modelo en el piso
-                    if (renderObjeto.getAttribute('gltf-model') !== estacionActiva.asset) {
-                        renderObjeto.setAttribute('gltf-model', estacionActiva.asset);
+                    // VERIFICACIÓN E INYECCIÓN EN CALIENTE
+                    // Leemos qué modelo tiene asignado actualmente la entidad
+                    const modeloActual = renderObjeto.getAttribute('gltf-model');
+                    
+                    // Si la entidad está vacía o tiene el modelo de otra estación, lo cambiamos
+                    if (!modeloActual || modeloActual !== estacionActiva.src) {
+                        console.log(`Inyectando activo 3D: ${estacionActiva.src}`);
+                        renderObjeto.setAttribute('gltf-model', estacionActiva.src);
                         renderObjeto.setAttribute('scale', estacionActiva.escala);
                     }
-                    escena.setAttribute('visible', 'true');
+                    
                     hud.innerHTML = `<span style="color: #10b981;">● En la Ubicación</span><br>${estacionActiva.nombre}`;
                 } else {
-                    // EL TURISTA ESTÁ EN EL SENDERO: Apagamos gráficos y mostramos brújula de distancia
-                    escena.setAttribute('visible', 'false');
+                    // FUERA DE RANGO: Vaciamos el atributo para liberar memoria RAM y ocultar el objeto
+                    if (renderObjeto.hasAttribute('gltf-model')) {
+                        console.log("Removiendo activo 3D (Fuera de rango)");
+                        renderObjeto.removeAttribute('gltf-model');
+                    }
                     hud.innerHTML = `Explorando Neuquén...<br>Próximo punto de interés a: ${Math.round(menorDistancia)} metros`;
                 }
             }, error => {
-                hud.innerHTML = "Error: Activá los servicios de Ubicación Precisa en tu celular.";
+                hud.innerHTML = "Error: Habilitá la ubicación precisa en los ajustes de tu navegador.";
             }, {
-                enableHighAccuracy: true, // Forzar uso de GPS de hardware satelital
+                enableHighAccuracy: true,
                 maximumAge: 0,
                 timeout: 10000
             });
         } else {
-            hud.innerHTML = "Dispositivo incompatible con navegación satelital web.";
+            hud.innerHTML = "Tu dispositivo no cuenta con soporte de geolocalización.";
         }
     </script>
 </body>
