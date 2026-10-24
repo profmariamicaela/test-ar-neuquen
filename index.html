@@ -2,237 +2,70 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Dino AR WebXR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dinosaurio AR</title>
+  
+  <!-- Librería oficial de Google Model Viewer -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
   <style>
-    body {
+    body, html {
       margin: 0;
       padding: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      background-color: #111;
+      background-color: #121212;
       font-family: sans-serif;
     }
-    #overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      background: rgba(0, 0, 0, 0.85);
-      z-index: 10;
-      color: white;
-      text-align: center;
-      padding: 20px;
-      box-sizing: border-box;
+
+    model-viewer {
+      width: 100%;
+      height: 100%;
     }
-    #start-btn {
-      padding: 16px 32px;
-      font-size: 18px;
-      font-weight: bold;
-      color: #fff;
-      background: #007bff;
-      border: none;
-      border-radius: 30px;
-      cursor: pointer;
-      box-shadow: 0 4px 15px rgba(0,123,255,0.4);
-    }
-    #status {
+
+    #ar-button {
       position: absolute;
-      top: 20px;
+      bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.6);
-      color: #fff;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 14px;
-      z-index: 5;
-      display: none;
-      pointer-events: none;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 30px;
+      padding: 16px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
   </style>
-  <!-- Three.js y cargador GLTF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
-  <div id="status">Buscando piso... Mueve el celular apuntando hacia el suelo</div>
+  <!--
+    ar-placement="floor": Garantiza que el dinosaurio se ancle al suelo real.
+    ar-modes="scene-viewer webxr quick-look": Da prioridad al visor nativo de Android si WebXR falla.
+    autoplay: Ejecuta la animación dinorun automáticamente.
+  -->
+  <model-viewer 
+    src="./dinorun.glb" 
+    ar 
+    ar-placement="floor"
+    ar-modes="scene-viewer webxr quick-look" 
+    camera-controls 
+    autoplay
+    shadow-intensity="1"
+    environment-image="neutral"
+    alt="Modelo 3D de Dinosaurio corriendo">
+    
+    <button slot="ar-button" id="ar-button">
+      Abrir Cámara y Colocar en el Piso
+    </button>
+  </model-viewer>
 
-  <div id="overlay">
-    <h2>Experiencia AR Dinosaurio</h2>
-    <p>Presiona el botón para solicitar los permisos de la cámara e iniciar la detección del suelo.</p>
-    <button id="start-btn">Iniciar Experiencia AR</button>
-  </div>
-
-  <script>
-    let scene, camera, renderer;
-    let xrSession = null;
-    let xrRefSpace = null;
-    let xrViewerSpace = null;
-    let hitTestSource = null;
-
-    let mixer = null;
-    let dinoModel = null;
-    let isPlaced = false;
-
-    // Configuración del movimiento circular / loop
-    let centerPos = new THREE.Vector3();
-    let circleRadius = 1.6; // Radio del círculo en metros
-    let currentAngle = -Math.PI / 2; // Inicia alejado al frente
-    const speed = 0.55; // Velocidad de desplazamiento
-
-    const statusElem = document.getElementById('status');
-    const startBtn = document.getElementById('start-btn');
-    const overlay = document.getElementById('overlay');
-
-    // Inicializar Three.js
-    function init() {
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
-      scene.add(hemiLight);
-
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-      dirLight.position.set(0, 5, 2);
-      scene.add(dirLight);
-
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
-
-      // Cargar modelo dinorun.glb
-      const loader = new THREE.GLTFLoader();
-      loader.load('./dinorun.glb', (gltf) => {
-        dinoModel = gltf.scene;
-        // Ajusta la escala si tu modelo es muy grande o muy chico
-        dinoModel.scale.set(0.5, 0.5, 0.5);
-        dinoModel.visible = false;
-        scene.add(dinoModel);
-
-        // Reproducir la primera animación incluida en el archivo (correr/caminar)
-        if (gltf.animations && gltf.animations.length > 0) {
-          mixer = new THREE.AnimationMixer(dinoModel);
-          const action = mixer.clipAction(gltf.animations[0]);
-          action.play();
-        }
-      }, undefined, (err) => {
-        console.error("Error al cargar dinorun.glb. Verifica que esté en la misma carpeta.", err);
-      });
-
-      startBtn.addEventListener('click', startAR);
-    }
-
-    async function startAR() {
-      if (!navigator.xr) {
-        alert("WebXR no está disponible en este navegador. Asegúrate de usar Google Chrome en Android.");
-        return;
-      }
-
-      const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
-      if (!isSupported) {
-        alert("Tu dispositivo o navegador no soporta AR inmersiva. Verifica tener 'Servicios de Google Play para RA' (ARCore) actualizado.");
-        return;
-      }
-
-      // Solicitud de sesión AR con Hit-Test para detectar el suelo
-      navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['local-floor']
-      }).then(onSessionStarted).catch(err => {
-        alert("No se pudo iniciar la sesión AR: " + err.message);
-      });
-    }
-
-    async function onSessionStarted(session) {
-      xrSession = session;
-      overlay.style.display = 'none';
-      statusElem.style.display = 'block';
-
-      renderer.xr.setReferenceSpaceType('local');
-      await renderer.xr.setSession(session);
-
-      xrRefSpace = await session.requestReferenceSpace('local');
-      xrViewerSpace = await session.requestReferenceSpace('viewer');
-
-      // Origen del raycast hacia el suelo real
-      hitTestSource = await session.requestHitTestSource({ space: xrViewerSpace });
-
-      session.addEventListener('end', () => {
-        hitTestSource = null;
-        xrSession = null;
-        overlay.style.display = 'flex';
-        statusElem.style.display = 'none';
-      });
-
-      renderer.setAnimationLoop(renderLoop);
-    }
-
-    const clock = new THREE.Clock();
-
-    function renderLoop(timestamp, frame) {
-      const delta = clock.getDelta();
-      if (mixer) mixer.update(delta);
-
-      if (frame && xrSession) {
-        // 1. Fase de anclaje inicial: Buscar el suelo frente a la cámara
-        if (!isPlaced && hitTestSource) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(xrRefSpace);
-
-            if (pose && dinoModel) {
-              // Obtenemos la posición de impacto en el suelo
-              const groundY = pose.transform.position.y;
-              const hitX = pose.transform.position.x;
-              const hitZ = pose.transform.position.z;
-
-              // Establecemos el centro del círculo delante del usuario
-              centerPos.set(hitX, groundY, hitZ - circleRadius);
-
-              dinoModel.visible = true;
-              isPlaced = true;
-              statusElem.innerText = "¡Dinosaurio ubicado en el suelo!";
-              setTimeout(() => { statusElem.style.display = 'none'; }, 2500);
-            }
-          }
-        }
-
-        // 2. Trayectoria circular: Viene hacia ti, gira a la derecha, regresa y entra en loop
-        if (isPlaced && dinoModel) {
-          currentAngle += (speed / circleRadius) * delta;
-
-          // Ecuación de la circunferencia sobre el plano horizontal X-Z
-          const x = centerPos.x + circleRadius * Math.sin(currentAngle);
-          const z = centerPos.z + circleRadius * Math.cos(currentAngle);
-          const y = centerPos.y; // Se mantiene en el nivel del piso detectado
-
-          dinoModel.position.set(x, y, z);
-
-          // Orientar el modelo hacia la dirección tangencial en la que avanza
-          const tangent = new THREE.Vector3(
-            Math.cos(currentAngle),
-            0,
-            -Math.sin(currentAngle)
-          ).normalize();
-
-          const targetLook = new THREE.Vector3().addVectors(dinoModel.position, tangent);
-          dinoModel.lookAt(targetLook);
-        }
-      }
-
-      renderer.render(scene, camera);
-    }
-
-    window.addEventListener('DOMContentLoaded', init);
-  </script>
 </body>
 </html>
