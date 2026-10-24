@@ -13,103 +13,153 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    #status-msg {
+    #camera-video {
       position: fixed;
-      bottom: 80px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.75);
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 20px;
-      font-size: 14px;
-      z-index: 9999;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 1;
+    }
+
+    #three-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 2;
       pointer-events: none;
+    }
+
+    #start-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+      color: #fff;
       text-align: center;
-      display: none;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    #start-btn {
+      margin-top: 24px;
+      padding: 16px 36px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #000;
+      background: #00e676;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 230, 118, 0.4);
     }
   </style>
 
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-      }
-    }
-  </script>
+  <!-- Three.js universal via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
-  <div id="status-msg">Iniciando AR...</div>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { ARButton } from 'three/addons/webxr/ARButton.js';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  <!-- Video nativo de la cámara trasera -->
+  <video id="camera-video" autoplay playsinline muted></video>
 
-    let camera, scene, renderer;
-    let hitTestSource = null;
-    let hitTestSourceRequested = false;
+  <!-- Lienzo 3D encima de la cámara -->
+  <canvas id="three-canvas"></canvas>
 
+  <!-- Botón inicial directo (requerido por navegadores para activar cámara y audio) -->
+  <div id="start-screen">
+    <h2>Dinosaurio AR</h2>
+    <p>Presiona el botón para abrir la cámara y ver al dinosaurio en el piso</p>
+    <button id="start-btn">Iniciar Experiencia</button>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById('start-btn');
+    const startScreen = document.getElementById('start-screen');
+    const video = document.getElementById('camera-video');
+    const canvas = document.getElementById('three-canvas');
+
+    let scene, camera, renderer, mixer;
     let dinoModel = null;
-    let mixer = null;
     const clock = new THREE.Clock();
 
-    let floorDetected = false;
-    let angle = -Math.PI / 2;
-    const radius = 1.6;
-    const speed = 0.45;
-    let centerPos = new THREE.Vector3();
+    // Trayectoria circular del dinosaurio
+    let angle = -Math.PI / 2; // Inicia alejado al frente
+    const radius = 2.0;       // Radio del círculo en metros
+    const speed = 0.55;       // Velocidad del recorrido
 
-    const statusMsg = document.getElementById('status-msg');
+    // Posición del centro del círculo en el piso simulado
+    const centerPos = new THREE.Vector3(0, -1.3, -3.2);
 
-    init();
+    startBtn.addEventListener('click', async () => {
+      startBtn.disabled = true;
+      startBtn.innerText = "Abriendo cámara...";
 
-    function showStatus(text, duration = 3000) {
-      statusMsg.innerText = text;
-      statusMsg.style.display = 'block';
-      if (duration > 0) {
-        setTimeout(() => {
-          statusMsg.style.display = 'none';
-        }, duration);
+      try {
+        // 1. Abrir la cámara trasera directamente sin WebXR
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        // Ocultar pantalla inicial
+        startScreen.style.display = 'none';
+
+        // 2. Inicializar entorno 3D
+        initThree();
+      } catch (err) {
+        alert("No se pudo acceder a la cámara: " + err.name + " - " + err.message);
+        startBtn.disabled = false;
+        startBtn.innerText = "Reintentar";
       }
-    }
+    });
 
-    function init() {
-      // 1. Escena y cámara básica
+    function initThree() {
+      // Escena con fondo transparente (para ver el video detrás)
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      // 2. Iluminación
-      const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.5);
-      scene.add(ambientLight);
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 0, 0);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
-      dirLight.position.set(0, 5, 2);
-      scene.add(dirLight);
-
-      // 3. Renderer con WebXR activado
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
 
-      // 4. Botón AR nativo oficial de Three.js (Evita bloqueos de superposición de Android)
-      const arButton = ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test']
-      });
-      document.body.appendChild(arButton);
+      // Iluminación
+      const ambientLight = new THREE.HemisphereLight(0xffffff, 0x555555, 1.4);
+      scene.add(ambientLight);
 
-      // 5. Cargar modelo 3D
-      const loader = new GLTFLoader();
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+      dirLight.position.set(2, 6, 3);
+      scene.add(dirLight);
+
+      // Cargar modelo dinorun.glb
+      const loader = new THREE.GLTFLoader();
       loader.load(
         './dinorun.glb',
         (gltf) => {
           dinoModel = gltf.scene;
-          dinoModel.visible = false;
           dinoModel.scale.set(0.35, 0.35, 0.35);
 
+          // Iniciar animación embebida en el modelo
           if (gltf.animations && gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(dinoModel);
             const action = mixer.clipAction(gltf.animations[0]);
@@ -119,78 +169,36 @@
           scene.add(dinoModel);
         },
         undefined,
-        (err) => console.error('Error cargando dinorun.glb:', err)
+        (err) => console.error("Error al cargar modelo:", err)
       );
 
-      // Eventos de sesión WebXR
-      renderer.xr.addEventListener('sessionstart', () => {
-        showStatus('Apunta la cámara hacia el suelo...', 5000);
-      });
-
-      renderer.xr.addEventListener('sessionend', () => {
-        hitTestSourceRequested = false;
-        hitTestSource = null;
-        floorDetected = false;
-        if (dinoModel) dinoModel.visible = false;
-      });
-
-      renderer.setAnimationLoop(render);
-      window.addEventListener('resize', onWindowResize);
+      window.addEventListener('resize', onResize);
+      animate();
     }
 
-    function onWindowResize() {
+    function onResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function render(timestamp, frame) {
+    function animate() {
+      requestAnimationFrame(animate);
+
       const delta = clock.getDelta();
       if (mixer) mixer.update(delta);
 
-      if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
-        const session = renderer.xr.getSession();
-
-        if (!hitTestSourceRequested) {
-          session.requestReferenceSpace('viewer').then((viewerSpace) => {
-            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-              hitTestSource = source;
-            });
-          });
-          hitTestSourceRequested = true;
-        }
-
-        if (hitTestSource && !floorDetected) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-
-            centerPos.set(
-              pose.transform.position.x,
-              pose.transform.position.y,
-              pose.transform.position.z - radius
-            );
-
-            floorDetected = true;
-            if (dinoModel) dinoModel.visible = true;
-            showStatus('¡Piso detectado!', 2000);
-          }
-        }
-      }
-
-      // Animación en órbita circular
-      if (floorDetected && dinoModel) {
+      if (dinoModel) {
+        // Movimiento circular continuo: se acerca, dobla a su derecha y regresa
         angle += speed * delta;
 
         const posX = centerPos.x + radius * Math.cos(angle);
         const posZ = centerPos.z + radius * Math.sin(angle);
-        const posY = centerPos.y;
+        const posY = centerPos.y; // Nivel constante del suelo
 
         dinoModel.position.set(posX, posY, posZ);
 
+        // Hace que mire exactamente en la dirección hacia donde se traslada
         const lookTarget = new THREE.Vector3(
           posX - Math.sin(angle),
           posY,
