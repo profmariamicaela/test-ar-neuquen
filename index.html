@@ -9,59 +9,27 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* Pantalla inicial para disparar permisos de cámara inmediatamente */
-    #overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.85);
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 999;
-      text-align: center;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-
-    #start-btn {
-      padding: 16px 36px;
-      font-size: 18px;
-      font-weight: 600;
-      background-color: #00e676;
-      color: #000;
-      border: none;
-      border-radius: 50px;
-      cursor: pointer;
-      box-shadow: 0 4px 15px rgba(0, 230, 118, 0.4);
-      margin-top: 20px;
-    }
-
-    #instructions {
-      position: absolute;
-      bottom: 24px;
+    #status-msg {
+      position: fixed;
+      bottom: 80px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
       padding: 10px 20px;
       border-radius: 20px;
       font-size: 14px;
-      z-index: 10;
+      z-index: 9999;
       pointer-events: none;
+      text-align: center;
       display: none;
     }
   </style>
 
-  <!-- Import Map para Three.js -->
   <script type="importmap">
     {
       "imports": {
@@ -72,15 +40,7 @@
   </script>
 </head>
 <body>
-
-  <!-- Superposición para cumplir con la política de seguridad del navegador y abrir cámara -->
-  <div id="overlay">
-    <h2>Experiencia de Realidad Aumentada</h2>
-    <p>Toca para abrir la cámara y escanear el suelo</p>
-    <button id="start-btn">Comenzar AR</button>
-  </div>
-
-  <div id="instructions">Apunta la cámara hacia el suelo...</div>
+  <div id="status-msg">Iniciando AR...</div>
 
   <script type="module">
     import * as THREE from 'three';
@@ -88,7 +48,6 @@
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
     let camera, scene, renderer;
-    let controller;
     let hitTestSource = null;
     let hitTestSourceRequested = false;
 
@@ -96,27 +55,32 @@
     let mixer = null;
     const clock = new THREE.Clock();
 
-    // Variables de trayectoria en círculo
     let floorDetected = false;
-    let angle = -Math.PI / 2; // Inicia al fondo enfrente
-    const radius = 1.6;        // Radio del círculo en metros
-    const speed = 0.45;        // Velocidad de movimiento
-    let centerPos = new THREE.Vector3(); // Centro del círculo en el piso
+    let angle = -Math.PI / 2;
+    const radius = 1.6;
+    const speed = 0.45;
+    let centerPos = new THREE.Vector3();
 
-    const startBtn = document.getElementById('start-btn');
-    const overlay = document.getElementById('overlay');
-    const instructions = document.getElementById('instructions');
+    const statusMsg = document.getElementById('status-msg');
 
-    startBtn.addEventListener('click', initAR);
+    init();
 
-    function initAR() {
-      // 1. Configurar Escena
+    function showStatus(text, duration = 3000) {
+      statusMsg.innerText = text;
+      statusMsg.style.display = 'block';
+      if (duration > 0) {
+        setTimeout(() => {
+          statusMsg.style.display = 'none';
+        }, duration);
+      }
+    }
+
+    function init() {
+      // 1. Escena y cámara básica
       scene = new THREE.Scene();
-
-      // 2. Configurar Cámara
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      // 3. Luces
+      // 2. Iluminación
       const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.5);
       scene.add(ambientLight);
 
@@ -124,23 +88,28 @@
       dirLight.position.set(0, 5, 2);
       scene.add(dirLight);
 
-      // 4. Configurar Renderer con WebXR habilitado
+      // 3. Renderer con WebXR activado
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // 5. Cargar el modelo 3D con su animación interna
+      // 4. Botón AR nativo oficial de Three.js (Evita bloqueos de superposición de Android)
+      const arButton = ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test']
+      });
+      document.body.appendChild(arButton);
+
+      // 5. Cargar modelo 3D
       const loader = new GLTFLoader();
       loader.load(
         './dinorun.glb',
         (gltf) => {
           dinoModel = gltf.scene;
-          dinoModel.visible = false; // Se oculta hasta encontrar el piso
-          dinoModel.scale.set(0.35, 0.35, 0.35); // Ajustar tamaño según escala del modelo
+          dinoModel.visible = false;
+          dinoModel.scale.set(0.35, 0.35, 0.35);
 
-          // Reproducir la animación de caminar que viene en el archivo
           if (gltf.animations && gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(dinoModel);
             const action = mixer.clipAction(gltf.animations[0]);
@@ -150,25 +119,19 @@
           scene.add(dinoModel);
         },
         undefined,
-        (err) => console.error('Error al cargar dinorun.glb:', err)
+        (err) => console.error('Error cargando dinorun.glb:', err)
       );
 
-      // 6. Configurar sesión de WebXR AR
-      const sessionInit = { requiredFeatures: ['hit-test'] };
-      
-      navigator.xr.requestSession('immersive-ar', sessionInit).then((session) => {
-        renderer.xr.setSession(session);
-        overlay.style.display = 'none';
-        instructions.style.display = 'block';
+      // Eventos de sesión WebXR
+      renderer.xr.addEventListener('sessionstart', () => {
+        showStatus('Apunta la cámara hacia el suelo...', 5000);
+      });
 
-        session.addEventListener('end', () => {
-          hitTestSourceRequested = false;
-          hitTestSource = null;
-          overlay.style.display = 'flex';
-          instructions.style.display = 'none';
-        });
-      }).catch(err => {
-        alert('WebXR no está disponible o la cámara fue rechazada: ' + err.message);
+      renderer.xr.addEventListener('sessionend', () => {
+        hitTestSourceRequested = false;
+        hitTestSource = null;
+        floorDetected = false;
+        if (dinoModel) dinoModel.visible = false;
       });
 
       renderer.setAnimationLoop(render);
@@ -181,7 +144,6 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    // Loop de renderizado por frame
     function render(timestamp, frame) {
       const delta = clock.getDelta();
       if (mixer) mixer.update(delta);
@@ -190,7 +152,6 @@
         const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
 
-        // Solicitar Hit-Test para detectar la superficie del suelo real
         if (!hitTestSourceRequested) {
           session.requestReferenceSpace('viewer').then((viewerSpace) => {
             session.requestHitTestSource({ space: viewerSpace }).then((source) => {
@@ -200,7 +161,6 @@
           hitTestSourceRequested = true;
         }
 
-        // Si tenemos hit-test y aún no fijamos el centro en el piso
         if (hitTestSource && !floorDetected) {
           const hitTestResults = frame.getHitTestResults(hitTestSource);
 
@@ -208,34 +168,29 @@
             const hit = hitTestResults[0];
             const pose = hit.getPose(referenceSpace);
 
-            // Fijamos la posición del suelo
             centerPos.set(
               pose.transform.position.x,
-              pose.transform.position.y, // Altura real del suelo
-              pose.transform.position.z - radius // Colocado hacia el frente
+              pose.transform.position.y,
+              pose.transform.position.z - radius
             );
 
             floorDetected = true;
             if (dinoModel) dinoModel.visible = true;
-            instructions.innerText = '¡Piso detectado!';
-            setTimeout(() => { instructions.style.display = 'none'; }, 2000);
+            showStatus('¡Piso detectado!', 2000);
           }
         }
       }
 
-      // Animación de trayectoria: Viene hacia ti, gira a su derecha y hace loop en círculo
+      // Animación en órbita circular
       if (floorDetected && dinoModel) {
-        angle += speed * delta; // Avanza en sentido horario
+        angle += speed * delta;
 
-        // Posición sobre el plano del suelo
         const posX = centerPos.x + radius * Math.cos(angle);
         const posZ = centerPos.z + radius * Math.sin(angle);
-        const posY = centerPos.y; // Se mantiene firmemente sobre el piso
+        const posY = centerPos.y;
 
         dinoModel.position.set(posX, posY, posZ);
 
-        // Orientar al dinosaurio tangente a la curva (mirando hacia adelante en la dirección de marcha)
-        // Vector velocidad / dirección tangente: (-sin(angle), 0, cos(angle))
         const lookTarget = new THREE.Vector3(
           posX - Math.sin(angle),
           posY,
