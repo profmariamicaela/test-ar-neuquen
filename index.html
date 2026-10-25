@@ -70,10 +70,8 @@
         });
     </script>
 
-    <a-scene vr-mode-ui="enabled: false"         embedded 
-    renderer="alpha: true; antialias: true;" 
-    style="background: transparent;">
-        
+<a-scene vr-mode-ui="enabled: false" embedded style="background: transparent;">        
+    
         <a-assets>
             <a-asset-item id="dino-glb" src="models/dino.glb"></a-asset-item>
             <a-asset-item id="mono-glb" src="models/dinorun.glb"></a-asset-item>
@@ -103,41 +101,15 @@
 
         const CIRCUITO_NEUQUEN = [
             { id: 'dino', nombre: 'Estación 1: Parque de los Dinosaurios', lat: -38.934435, lon:  -68.105492,  rango: 20, src: 'models/dino.glb', escala: '0.8 0.8 0.8' },
-            { id: 'mono', nombre: 'Estación 2: Shale Añelo', lat: -38.350744 , lon: -68.812517, rango: 20, src: 'models/dinorun.glb', escala: '1.0 1.0 1.0' },
+            { id: 'mono', nombre: 'Estación 2: Shale Añelo', lat: -34.640300 , lon: -58.476363, rango: 20, src: 'models/dinorun.glb', escala: '1.0 1.0 1.0' },
             { id: 'planta', nombre: 'Estación 3: Cenotafio a Los Caídos en Malvinas', lat: -38.956543, lon: -68.055058, rango: 15, src: 'models/planta.glb', escala: '0.9 0.9 0.9' }
         ];
 
-  // ANTES -->      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
- //           .then(stream => { video.srcObject = stream; })
-   //         .catch(err => { hud.innerHTML = "Error: Permití el acceso a la cámara."; });
+       navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+         .then(stream => { video.srcObject = stream; })
+           .catch(err => { hud.innerHTML = "Error: Permití el acceso a la cámara."; });
 
-        // AHORA
-navigator.mediaDevices.getUserMedia({
-    video: {
-        facingMode: { ideal: "environment" }
-    },
-    audio: false
-})
-.then(stream => {
-    video.srcObject = stream;
-    video.setAttribute('playsinline', '');
-    video.setAttribute('muted', '');
-    video.muted = true;
-
-    // Aseguramos que empiece a reproducir una vez cargada la metadata
-    video.onloadedmetadata = () => {
-        video.play().catch(e => {
-            console.error("Fallo al reproducir video:", e);
-            // Si el navegador bloqueó el autoplay, activarlo al primer toque
-            window.addEventListener('click', () => video.play(), { once: true });
-        });
-    };
-})
-.catch(err => {
-    console.error("Error getUserMedia:", err);
-    hud.innerHTML = "Error: Permití el acceso a la cámara o revisá permisos HTTPS.";
-});
-
+      
         function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
             const R = 6371e3; 
             const p1 = lat1 * Math.PI / 180; const p2 = lat2 * Math.PI / 180;
